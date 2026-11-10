@@ -1,0 +1,10 @@
+.DS_Store
+._*
+node_modules/
+*.log
+.vscode/
+.idea/
+# Local site data: show file, pictures, config
+data/
+dante-swap.config.json
+coverage/

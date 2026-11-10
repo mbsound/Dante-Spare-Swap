@@ -1,0 +1,50 @@
+{
+  "name": "dante-spare-swap",
+  "version": "0.1.0",
+  "description": "Main / spare patching for theatrical Dante networks: tap a channel, tap a spare, SWAP. Zero-dependency Node.js server with a browser UI.",
+  "main": "server.js",
+  "bin": {
+    "dante-spare-swap": "server.js"
+  },
+  "engines": {
+    "node": ">=18.3"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "files": [
+    "server.js",
+    "lib/",
+    "public/",
+    "scripts/",
+    "dante-swap.config.example.json",
+    "*.command",
+    "*.bat",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "dante",
+    "audinate",
+    "theatre",
+    "rf",
+    "wireless",
+    "backup",
+    "spare",
+    "routing",
+    "metering",
+    "pro-audio"
+  ],
+  "author": "Matt Bell (mbsound)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mbsound/Dante-Spare-Swap.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mbsound/Dante-Spare-Swap/issues"
+  },
+  "homepage": "https://github.com/mbsound/Dante-Spare-Swap#readme"
+}

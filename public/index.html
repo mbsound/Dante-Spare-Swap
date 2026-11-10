@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Dante Spare Swap</title>
+  <meta name="theme-color" content="#0e1014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top-header">
+    <div class="brand-section">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 28 28" width="26" height="26" fill="none">
+          <circle cx="14" cy="14" r="13" stroke="#ff9100" stroke-width="2"/>
+          <path d="M8 11h9l-3-3M20 17h-9l3 3" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="brand-titles">
+        <h1>DANTE SPARE SWAP</h1>
+        <div class="network-status-line">
+          <span class="status-dot" id="statusDot"></span>
+          <span class="status-text" id="statusText">Connecting…</span>
+          <div class="nic-select-wrap">
+            <label for="nicSelect">NIC:</label>
+            <select id="nicSelect" class="nic-select" title="Network interface used for Dante">
+              <option value="">Detecting…</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="show-title-wrap">
+      <input id="showName" class="show-name" type="text" maxlength="64" value="Untitled Show" title="Show name (click to edit)" aria-label="Show name">
+      <span class="show-counts" id="showCounts"></span>
+    </div>
+
+    <div class="toolbar-actions">
+      <button class="btn btn-primary" id="btnAddChannel" type="button">+ Channel</button>
+      <button class="btn" id="btnReceivers" type="button" title="Wireless receivers (Shure / Sennheiser) for RF, battery and audio readouts">Receivers</button>
+      <button class="btn" id="btnEdit" type="button" aria-pressed="false" title="Show settings buttons on cards">Edit</button>
+      <button class="btn btn-icon-only" id="btnRefresh" type="button" title="Re-scan the Dante network">⟳</button>
+      <button class="btn btn-icon-only" id="btnFullscreen" type="button" title="Fullscreen">⛶</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="channels-pane" id="channelsPane" aria-label="Channels">
+      <div class="cards-grid" id="cardsGrid"></div>
+      <div class="empty-state" id="channelsEmpty">
+        <p><strong>No channels yet.</strong></p>
+        <p class="subtext">Press <b>+ Channel</b> to add a card for each RF mic (or any Dante path). Give it a picture, then set which transmitter and which receiver channel it uses.</p>
+      </div>
+    </section>
+
+    <aside class="spares-pane" aria-label="Spares">
+      <div class="pane-header">
+        <h2>SPARES</h2>
+        <button class="btn btn-small" id="btnAddSpare" type="button">+ Spare</button>
+      </div>
+      <div class="spares-list" id="sparesList"></div>
+      <div class="empty-state small" id="sparesEmpty">
+        <p class="subtext">Declare the transmit paths you keep as backups. Tap a channel, tap a spare, then SWAP.</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="swap-bar">
+    <div class="selection">
+      <div class="sel-box" id="selMain">
+        <span class="sel-label">MAIN</span>
+        <span class="sel-value" id="selMainText">Tap a channel</span>
+      </div>
+      <span class="sel-arrow" aria-hidden="true">→</span>
+      <div class="sel-box" id="selSpare">
+        <span class="sel-label">SPARE</span>
+        <span class="sel-value" id="selSpareText">Tap a spare</span>
+      </div>
+    </div>
+    <div class="swap-actions">
+      <button class="btn btn-restore" id="btnRestore" type="button" disabled title="Put the selected channel back on its own transmitter">RESTORE MAIN</button>
+      <button class="btn btn-swap" id="btnSwap" type="button" disabled>SWAP</button>
+    </div>
+    <div class="result-line" id="resultLine" role="status" aria-live="polite">
+      <button class="result-text" id="resultText" type="button" title="Show swap history"></button>
+    </div>
+  </footer>
+
+  <div class="history-drawer" id="historyDrawer" hidden>
+    <div class="drawer-header"><h3>Swap history</h3><button class="btn btn-small" id="btnCloseHistory" type="button">Close</button></div>
+    <ol id="historyList"></ol>
+  </div>
+
+  <!-- Settings dialog (channel or spare) -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <form class="modal" id="settingsForm" autocomplete="off">
+      <div class="modal-header">
+        <h2 id="modalTitle">Channel settings</h2>
+        <button class="btn btn-small" type="button" id="btnCloseModal" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="pic-row">
+          <div class="pic-preview" id="picPreview"><span class="pic-initials" id="picInitials">?</span></div>
+          <div class="pic-controls">
+            <label class="btn btn-small" for="picFile">Choose picture…</label>
+            <input type="file" id="picFile" accept="image/*" hidden>
+            <button class="btn btn-small" type="button" id="btnRemovePic">Remove</button>
+            <p class="hint">Pictures are shrunk to 640 px and stored next to the show file.</p>
+          </div>
+        </div>
+
+        <label class="field">
+          <span>Name</span>
+          <input type="text" id="fName" maxlength="64" required placeholder="e.g. Vocal 1 — Maria">
+        </label>
+
+        <fieldset class="path-fieldset" id="txFieldset">
+          <legend>Transmit path (the mic's Dante transmitter)</legend>
+          <div class="path-row">
+            <label class="field grow"><span>Device</span><select id="fTxDevice"></select></label>
+            <label class="field grow" id="fTxManualWrap" hidden><span>Device name</span><input type="text" id="fTxManual" maxlength="64" placeholder="Dante device name"></label>
+            <label class="field ch"><span>Tx channel</span><select id="fTxChannel"></select></label>
+          </div>
+        </fieldset>
+
+        <fieldset class="path-fieldset" id="rxFieldset">
+          <legend id="rxLegend">Receive path (where it lands, e.g. the console input)</legend>
+          <div class="path-row">
+            <label class="field grow"><span>Device</span><select id="fRxDevice"></select></label>
+            <label class="field grow" id="fRxManualWrap" hidden><span>Device name</span><input type="text" id="fRxManual" maxlength="64" placeholder="Dante device name"></label>
+            <label class="field ch"><span>Rx channel</span><select id="fRxChannel"></select></label>
+          </div>
+          <p class="hint" id="rxCurrent"></p>
+          <label class="check" id="monitorWrap" hidden>
+            <input type="checkbox" id="fMonitor">
+            <span>When this spare is swapped in, patch the <b>main</b> mic's transmitter into this input so the faulty pack can be monitored and fixed. On restore, this spare's own transmitter is patched back here.</span>
+          </label>
+        </fieldset>
+
+        <fieldset class="path-fieldset" id="rfFieldset">
+          <legend>Wireless receiver (optional)</legend>
+          <div class="path-row">
+            <label class="field grow"><span>Receiver</span><select id="fRfReceiver"></select></label>
+            <label class="field ch"><span>Channel</span><select id="fRfChannel"></select></label>
+          </div>
+          <div class="view-row" id="viewRow">
+            <span class="field-label">Card shows</span>
+            <label class="radio"><input type="radio" name="view" value="dante" checked> Dante meters</label>
+            <label class="radio"><input type="radio" name="view" value="rf"> RF parameters (AF · Q · battery · RF A/B)</label>
+            <label class="radio"><input type="radio" name="view" value="all"> Both</label>
+          </div>
+          <p class="hint">Linking a receiver is optional. Add receivers with the <b>Receivers</b> button in the header.</p>
+        </fieldset>
+
+        <label class="field" id="notesWrap">
+          <span>Notes</span>
+          <input type="text" id="fNotes" maxlength="500" placeholder="Pack #, frequency, performer…">
+        </label>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-danger" type="button" id="btnDelete">Delete</button>
+        <span class="grow"></span>
+        <button class="btn" type="button" id="btnCancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="btnSave">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Wireless receivers dialog -->
+  <div class="modal-backdrop" id="rxModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>Wireless receivers</h2>
+        <button class="btn btn-small" type="button" id="btnCloseRx" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body rx-body">
+        <div class="rx-list-col">
+          <div class="rx-list-head"><span>Configured</span><button class="btn btn-small btn-primary" type="button" id="btnNewRx">+ Add</button></div>
+          <ul class="rx-list" id="rxList"></ul>
+          <div class="rx-list-head"><span>Found on the network</span></div>
+          <ul class="rx-list" id="rxFound"></ul>
+        </div>
+        <form class="rx-form" id="rxForm" autocomplete="off">
+          <h3 id="rxFormTitle">New receiver</h3>
+          <label class="field"><span>Type</span><select id="rxBrand"></select></label>
+          <p class="hint" id="rxBrandHint"></p>
+          <label class="field"><span>Name</span><input type="text" id="rxName" maxlength="64" placeholder="e.g. RF Rack A"></label>
+          <div class="path-row">
+            <label class="field grow"><span>IP address / host</span><input type="text" id="rxHost" maxlength="128" placeholder="192.168.1.50" required></label>
+            <label class="field ch"><span>Port</span><input type="number" id="rxPort" min="1" max="65535" placeholder="auto"></label>
+          </div>
+          <div class="path-row" id="rxAuthRow">
+            <label class="field grow"><span>Username</span><input type="text" id="rxUser" maxlength="64"></label>
+            <label class="field grow"><span>Password</span><input type="password" id="rxPass" maxlength="128" placeholder="(unchanged)"></label>
+          </div>
+          <label class="field ch"><span>Channels</span><input type="number" id="rxChannels" min="1" max="64" placeholder="auto"></label>
+          <p class="hint">Credentials are stored in the show file in the data folder (not shared with the Dante network).</p>
+          <div class="modal-footer rx-footer">
+            <button class="btn btn-danger" type="button" id="btnDeleteRx" hidden>Delete</button>
+            <span class="grow"></span>
+            <button class="btn btn-primary" type="submit" id="btnSaveRx">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="levels.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

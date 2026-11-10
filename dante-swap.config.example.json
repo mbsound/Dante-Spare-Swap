@@ -1,0 +1,11 @@
+{
+  "port": 8753,
+  "host": "0.0.0.0",
+  "nic": null,
+  "dataDir": "data",
+  "open": false,
+  "debug": false,
+  "deviceOverrides": {
+    "RF-Rack-1": { "manufacturer": "Example Audio Co", "modelName": "Quad Receiver" }
+  }
+}
