@@ -484,6 +484,7 @@
       openModal('channel', id);
     });
     makeDraggable(root, 'channel', id);
+    attachImageDrop(root, (file) => setPictureFromFile('channel', id, file), () => state.editing);
     if (sizer) sizer.observe(root);
     return { id, root, ...p, name, sub, txMeter, rxMeter, paths, rf, status: null };
   }
@@ -578,6 +579,7 @@
       openModal('spare', id);
     });
     makeDraggable(root, 'spare', id);
+    attachImageDrop(root, (file) => setPictureFromFile('spare', id, file), () => state.editing);
     return { id, root, ...p, name, sub, meter, rxMeter, rf, status: null };
   }
 
@@ -918,6 +920,7 @@
     cancel: $('btnCancel'),
     del: $('btnDelete'),
     save: $('btnSave'),
+    picRow: $('picRow'),
     picPreview: $('picPreview'),
     picInitials: $('picInitials'),
     picFile: $('picFile'),
@@ -1039,6 +1042,89 @@
       img.src = url;
     });
   }
+
+  // --- picture drag-and-drop / paste ---
+
+  function imageFileFrom(dataTransfer) {
+    if (!dataTransfer) return null;
+    for (const f of dataTransfer.files || []) if (f.type.startsWith('image/')) return f;
+    for (const item of dataTransfer.items || []) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) return item.getAsFile();
+    }
+    return null;
+  }
+
+  function hasFiles(e) {
+    return Boolean(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+  }
+
+  /** Make `element` accept a dropped image; `onFile(file)` is called with it. `allowed()` can veto. */
+  function attachImageDrop(element, onFile, allowed = () => true) {
+    let depth = 0;
+    element.addEventListener('dragenter', (e) => {
+      if (!hasFiles(e) || !allowed()) return;
+      e.preventDefault();
+      depth++;
+      element.classList.add('drop-target');
+    });
+    element.addEventListener('dragover', (e) => {
+      if (!hasFiles(e) || !allowed()) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    element.addEventListener('dragleave', () => {
+      if (--depth <= 0) {
+        depth = 0;
+        element.classList.remove('drop-target');
+      }
+    });
+    element.addEventListener('drop', (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      depth = 0;
+      element.classList.remove('drop-target');
+      if (!allowed()) return;
+      const file = imageFileFrom(e.dataTransfer);
+      if (!file) return toast('That is not an image file', true);
+      onFile(file);
+    });
+  }
+
+  /** Shrink, upload and store a picture on a card without opening its settings. */
+  async function setPictureFromFile(kind, id, file) {
+    try {
+      const dataUrl = await shrinkImage(file, IMAGE_MAX_PX);
+      const up = await api('POST', '/api/images', { dataUrl });
+      const base = kind === 'channel' ? '/api/channels' : '/api/spares';
+      await api('PATCH', `${base}/${encodeURIComponent(id)}`, { image: up.file });
+      toast('Picture updated');
+    } catch (err) {
+      toast(`Could not set picture: ${err.message}`, true);
+    }
+  }
+
+  // Settings dialog: drop onto the picture area, or paste an image anywhere while it is open.
+  attachImageDrop(f.picRow, async (file) => {
+    try {
+      modal.pendingDataUrl = await shrinkImage(file, IMAGE_MAX_PX);
+      updatePicPreview();
+    } catch (err) {
+      toast(`Could not read picture: ${err.message}`, true);
+    }
+  });
+  document.addEventListener('paste', async (e) => {
+    if (!modal.open) return;
+    const file = imageFileFrom(e.clipboardData);
+    if (!file) return;
+    e.preventDefault();
+    try {
+      modal.pendingDataUrl = await shrinkImage(file, IMAGE_MAX_PX);
+      updatePicPreview();
+    } catch (err) {
+      toast(`Could not read picture: ${err.message}`, true);
+    }
+  });
 
   // --- device / channel pickers ---
 

@@ -16,7 +16,7 @@ Built on the [Dante Audio Meter Bridge](https://github.com/mbsound/Dante-Meter-B
 
 ## How a show is set up
 
-1. **Channels** are cards, one per RF mic (or any Dante path). Each card has a picture (import a headshot), a name, and two paths:
+1. **Channels** are cards, one per RF mic (or any Dante path). Each card has a picture (choose, drag-and-drop or paste a headshot; in Edit mode you can drop an image straight onto a card), a name, and two paths:
    - **Transmit path**: the Dante transmitter channel the mic arrives on (e.g. `RF-Rack-A` Tx 3).
    - **Receive path**: where it lands (e.g. `FOH-Console` Rx 12).
 2. **Spares** live in the tray on the right. In **Edit** mode, drag cards (and spares) to reorder them. Each spare is a transmit path you hold in reserve (e.g. the spare pack on `RF-Rack-B` Tx 7).

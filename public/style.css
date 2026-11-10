@@ -244,7 +244,10 @@ body.editing .card-gear { display: flex; }
 .modal-footer { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border-subtle); }
 .grow { flex: 1; }
 
-.pic-row { display: flex; gap: 14px; align-items: center; }
+.pic-row { display: flex; gap: 14px; align-items: center; border: 2px dashed transparent; border-radius: 10px; padding: 6px; margin: -6px; transition: border-color 0.15s, background 0.15s; }
+.pic-row.drop-target { border-color: var(--select); background: rgba(79, 195, 247, 0.08); }
+.card.drop-target { border-color: var(--select); box-shadow: 0 0 0 3px rgba(79, 195, 247, 0.35); }
+.card.drop-target .card-pic::after { content: "Drop picture"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); color: #fff; font-weight: 800; letter-spacing: 0.5px; }
 .pic-preview { width: 128px; height: 96px; border-radius: 8px; background: #0e1117; border: 1px solid var(--border-subtle); overflow: hidden; display: flex; align-items: center; justify-content: center; flex: none; }
 .pic-preview img { width: 100%; height: 100%; object-fit: cover; }
 .pic-preview .pic-initials { font-size: 30px; }
