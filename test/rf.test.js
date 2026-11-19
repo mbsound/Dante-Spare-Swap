@@ -209,3 +209,27 @@ test('SSCv2: odd value shapes are ignored, CRLF event streams parse', () => {
   c.onEvent('event: message\ndata: {"/api/channel/1/level":{"value":-31.5}}');
   assert.equal(c.snapshot().channels[2].af, -31.5);
 });
+
+test('discovery: no SLP socket or query unless Shure discovery is on; toggling works while running', () => {
+  const { ReceiverDiscovery } = require('../lib/rf/discovery');
+  const d = new ReceiverDiscovery({ log: quiet });
+  const opened = [];
+  d.openSlp = () => {
+    opened.push('slp');
+    d.slp = { send: () => opened.push('slp-query'), close() {} };
+  };
+  d.openMdns = () => {
+    d.mdns = { send() {}, close() {} };
+  };
+  d.start();
+  assert.deepEqual(opened, [], 'SLP not opened by default');
+  d.query();
+  assert.deepEqual(opened, []);
+  d.setShureEnabled(true);
+  assert.deepEqual(opened, ['slp', 'slp-query']);
+  d.found.set('shure-ad|1.2.3.4', { brand: 'shure-ad', ip: '1.2.3.4', seen: Date.now() });
+  d.setShureEnabled(false);
+  assert.equal(d.slp, null);
+  assert.equal(d.list().length, 0, 'Shure units found are forgotten when turned off');
+  d.stop();
+});

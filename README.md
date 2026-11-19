@@ -82,7 +82,7 @@ On restore, the spare's own transmitter is patched back into its monitor input. 
 
 A card can also be linked to a channel on an RF receiver, so the operator sees the pack itself, not just its Dante audio. This is a choice per card: **Dante meters**, **RF parameters**, or **both**. RF parameters are AF level, RF A and B with the active antenna highlighted, link quality, transmitter battery with time remaining, transmitter name and model, frequency, mute and warnings such as interference. Cards with no receiver link behave as before.
 
-Add receivers with the **Receivers** button (they are also found on the network: Shure units via SLP, Sennheiser units via mDNS), then pick the receiver and channel in the card's settings.
+Add receivers with the **Receivers** button, then pick the receiver and channel in the card's settings. Sennheiser units are found on the network by mDNS. Looking for Shure units (an SLP service request, multicast every 10 s) is **off by default**; tick **Look for Shure units** in the Receivers dialog to turn it on. The setting is saved with the show.
 
 ![Receivers](Screenshots/Receivers.png)
 
@@ -204,7 +204,7 @@ Allow Node.js to accept incoming connections. The server listens on:
 - **UDP 8751**: metering stream (or the fallback port shown in the log)
 - **UDP 8702, 8708**: Dante device-info and heartbeat multicast
 - **UDP 5353**: mDNS (or a free port if the OS is already using 5353)
-- **UDP 8427**: Shure SLP announcements (receiver discovery)
+- **UDP 8427**: Shure SLP announcements (only when Shure discovery is turned on)
 - **TCP 8753** (or your `--port`): the web UI
 
 It sends queries to Dante devices on UDP 4440, 4455, 8700, 8702, 8800 and 38800, and to receivers on TCP 2202 (Shure), UDP 45 and TCP 443 (Sennheiser). Replies come back to temporary ports, which stateful firewalls allow automatically.

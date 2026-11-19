@@ -1530,8 +1530,15 @@
     pass: $('rxPass'),
     channels: $('rxChannels'),
     del: $('btnDeleteRx'),
-    save: $('btnSaveRx')
+    save: $('btnSaveRx'),
+    shure: $('rxShureDiscovery')
   };
+
+  rx.shure.addEventListener('change', () => {
+    api('PATCH', '/api/show', { settings: { shureDiscovery: rx.shure.checked } })
+      .then(() => setTimeout(refreshDiscovered, 1500))
+      .catch((err) => toast(err.message, true));
+  });
 
   els.receivers.addEventListener('click', () => openRxModal(null));
   rx.close.addEventListener('click', closeRxModal);
@@ -1568,6 +1575,7 @@
     try {
       const data = await api('GET', '/api/receivers');
       rxModal.discovered = data.discovered || [];
+      rx.shure.checked = Boolean(state.show.settings && state.show.settings.shureDiscovery);
       renderRxList();
     } catch {
       // ignore
@@ -1624,7 +1632,10 @@
     }
     rx.found.textContent = '';
     const found = (rxModal.discovered || []).filter((d) => !receivers.some((r) => r.host === d.ip));
-    if (!found.length) rx.found.appendChild(el('li', 'hint', 'Nothing found yet. Shure units answer SLP, Sennheiser units mDNS; you can always add by IP.'));
+    if (!found.length) {
+      const shureOn = Boolean(state.show.settings && state.show.settings.shureDiscovery);
+      rx.found.appendChild(el('li', 'hint', shureOn ? 'Nothing found yet. Shure units answer SLP, Sennheiser units mDNS; you can always add by IP.' : 'Nothing found yet. Sennheiser units are found by mDNS; Shure units are only looked for when the box below is ticked. You can always add by IP.'));
+    }
     for (const d of found) {
       const li = el('li', 'rx-item');
       li.append(el('div', 'rx-name', `${d.name || d.model}`), el('div', 'rx-sub', `${d.model} · ${d.ip} — click to add`));

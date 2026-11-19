@@ -49,7 +49,8 @@ function main() {
   store.load();
   const swap = new SwapController({ engine, store, log });
   const rf = new RfManager({ store, log, simulate: config.demo });
-  const discovery = config.demo ? null : new ReceiverDiscovery({ log, boundIp: config.nic && /^\d+\./.test(config.nic) ? config.nic : null });
+  const discovery = config.demo ? null : new ReceiverDiscovery({ log, boundIp: config.nic && /^\d+\./.test(config.nic) ? config.nic : null, shure: store.show.settings.shureDiscovery });
+  if (discovery) store.on('change', (show) => discovery.setShureEnabled(show.settings && show.settings.shureDiscovery));
   const web = createWebServer({ engine, store, swap, rf, discovery, version, log });
   const localUrl = `http://localhost:${config.port}`;
 

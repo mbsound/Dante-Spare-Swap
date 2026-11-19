@@ -270,3 +270,15 @@ test('edits are refused while a swap runs and a bad field leaves a card untouche
   assert.throws(() => store.addReceiver({ brand: 'constructor', host: '1.2.3.4' }), /Unknown receiver brand/);
   assert.throws(() => store.addChannel({ name: 'B', tx: { device: 'x'.repeat(70), channel: 1 } }), /too long/);
 });
+
+test('settings: Shure discovery is off by default and persists when turned on', () => {
+  const { store, dir } = tmpStore();
+  assert.equal(store.show.settings.shureDiscovery, false);
+  assert.equal(store.publicSnapshot().settings.shureDiscovery, false);
+  store.updateSettings({ shureDiscovery: true });
+  store.saveNow();
+  const again = new ShowStore({ dataDir: dir, log: quiet });
+  again.load();
+  assert.equal(again.show.settings.shureDiscovery, true);
+  assert.throws(() => store.updateSettings('yes'), ShowError);
+});
