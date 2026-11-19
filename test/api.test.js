@@ -26,6 +26,7 @@ function fakeEngine() {
     receiversOf: () => [],
     rxState: () => ({ subscribedDevice: 'RF', subscribedChannel: '02', status: 9 }),
     txSubscriptionName: (d, c) => String(c).padStart(2, '0'),
+    findDeviceByName: (name) => ({ name }),
     subscribe: () => ({ ok: true, txName: 'RF', txChannelName: '02', txOnline: true }),
     unsubscribe: () => ({ ok: true })
   });

@@ -64,6 +64,8 @@ Afterwards the channel's card goes grey with an **ON SPARE** badge. Its TX meter
 
 **RESTORE MAIN** puts the channel's own transmitter back into its receiver and frees the spare.
 
+A spare that is already carrying another channel is not taken silently: SWAP asks first, and if you go ahead the channel it leaves gets its own entry in the history marked UNPATCHED. Cards on a spare, and spares in use, cannot be deleted until restored, and the show cannot be edited while a swap is running. If the receiver does not report the new patch within 1.5 s, it is sent once more before the result is reported.
+
 Every step is a standard Dante receiver subscription change, the same thing Dante Controller does when you click a crosspoint. Transmitters are never configured and nothing else on the network is touched. The status line at the bottom shows the last result; click it for the full history with every step.
 
 ![Swap](Screenshots/Swap.png)
@@ -184,7 +186,7 @@ Everything the UI does is available over HTTP, which makes it straightforward to
 | `POST /api/spares`, `PATCH /api/spares/:id`, `DELETE /api/spares/:id` | Manage spares (`{ name, image, tx, rx, monitorMain, rf, view }`; `rx` is the optional monitor path) |
 | `POST /api/reorder` | `{ channels: [ids] }` or `{ spares: [ids] }` |
 | `POST /api/images` | `{ dataUrl }` → `{ file }` (picture stored in the data folder) |
-| `POST /api/swap` | `{ channelId, spareId }` → result with each step |
+| `POST /api/swap` | `{ channelId, spareId, force? }` → result with each step. 409 with `code: "spare-in-use"` when the spare carries another channel; repeat with `force: true` to take it anyway |
 | `POST /api/restore` | `{ channelId }` |
 | `POST /api/patch` | `{ rx: {device, channel}, tx: {device, channel} \| null }`: set or clear one subscription directly; replies with the receiver's state after 1.5 s |
 | `GET /api/history` | Recent swap results |

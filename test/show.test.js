@@ -41,6 +41,9 @@ function fakeEngine({ txNames = {} } = {}) {
     txSubscriptionName(dev, ch) {
       return subName(dev, ch);
     },
+    findDeviceByName(name) {
+      return name === 'Unknown-Tx' ? null : { name };
+    },
     rxState(rxDevice, rxChannel) {
       const r = routes.get(`${rxDevice.toLowerCase()}|${rxChannel}`);
       return r ? { subscribedDevice: r.device, subscribedChannel: r.channel, status: r.status, connected: r.status === 9 } : { subscribedDevice: null, status: 0 };
@@ -76,6 +79,9 @@ test('store validates, persists and reloads channels and spares', () => {
   assert.equal(again.show.channels[0].spareId, sp.id);
   assert.equal(again.show.spares[0].inUseBy, ch.id);
 
+  assert.throws(() => again.removeSpare(sp.id), /restore it first/);
+  assert.throws(() => again.removeChannel(ch.id), /restore it first/);
+  again.setOnSpare(ch.id, null);
   again.removeSpare(sp.id);
   assert.equal(again.show.channels[0].spareId, null);
 });
@@ -130,7 +136,11 @@ test('moving a spare from one main to another frees the first main', async () =>
   const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
 
   await swap.swap(a.id, spare.id);
-  await swap.swap(b.id, spare.id);
+  await assert.rejects(swap.swap(b.id, spare.id), (err) => err.status === 409 && err.code === 'spare-in-use' && err.inUseBy.name === 'A');
+  assert.equal(engine.rxState('Console', 1).subscribedChannel, '09', 'A untouched when refused');
+  const forced = await swap.swap(b.id, spare.id, { force: true });
+  assert.equal(forced.ok, true);
+  assert.equal(swap.history[1].title, 'A taken off spare S', 'the bumped main gets its own history entry');
   assert.equal(engine.rxState('Console', 1).subscribedDevice, null, 'A lost its spare feed');
   assert.equal(engine.rxState('Console', 2).subscribedChannel, '09');
   assert.equal(store.channel(a.id).spareId, null);
@@ -202,4 +212,61 @@ test('spare with a monitor path but the option off: monitor input is simply clea
   engine.log.length = 0;
   await swap.restore(main.id);
   assert.deepEqual(engine.log, ['sub Console/1 <- RF/1'], 'nothing is re-patched into the monitor input');
+});
+
+test('swap guards: monitor path equal to the main Rx, another channel\'s Rx, and a main with no Tx', async () => {
+  const { store } = tmpStore();
+  const engine = fakeEngine();
+  const a = store.addChannel({ name: 'A', tx: { device: 'RF', channel: 1 }, rx: { device: 'Console', channel: 1 } });
+  const b = store.addChannel({ name: 'B', tx: { device: 'RF', channel: 2 }, rx: { device: 'Console', channel: 2 } });
+  const noTx = store.addChannel({ name: 'NoTx', rx: { device: 'Console', channel: 3 } });
+  const bad1 = store.addSpare({ name: 'S1', tx: { device: 'RF', channel: 9 }, rx: { device: 'Console', channel: 1 }, monitorMain: true });
+  const bad2 = store.addSpare({ name: 'S2', tx: { device: 'RF', channel: 9 }, rx: { device: 'Console', channel: 2 }, monitorMain: true });
+  const good = store.addSpare({ name: 'S3', tx: { device: 'RF', channel: 9 } });
+  engine.patch('Console', 3, 'RF', 5);
+  const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
+  await assert.rejects(swap.swap(a.id, bad1.id), /same receiver/);
+  await assert.rejects(swap.swap(a.id, bad2.id), /"B"'s receive path/);
+  // A main without a transmit path can be swapped and restored (restore clears its Rx).
+  const r = await swap.swap(noTx.id, good.id);
+  assert.equal(r.ok, true);
+  assert.equal(engine.rxState('Console', 3).subscribedChannel, '09');
+  const back = await swap.restore(noTx.id);
+  assert.equal(back.ok, true);
+  assert.equal(engine.rxState('Console', 3).subscribedDevice, null);
+  assert.equal(store.spare(good.id).inUseBy, null);
+  void b;
+});
+
+test('swap re-sends the main patch once when the receiver does not report it', async () => {
+  const { store } = tmpStore();
+  const engine = fakeEngine();
+  const main = store.addChannel({ name: 'A', tx: { device: 'RF', channel: 1 }, rx: { device: 'Console', channel: 1 } });
+  const spare = store.addSpare({ name: 'S', tx: { device: 'RF', channel: 9 } });
+  engine.patch('Console', 1, 'RF', 1);
+  // First subscribe is "lost": it does not change the routing table.
+  const realSubscribe = engine.subscribe.bind(engine);
+  let calls = 0;
+  engine.subscribe = (args) => {
+    calls++;
+    if (calls === 1) {
+      engine.log.push('sub lost');
+      return { ok: true, txName: args.txDevice, txChannelName: '09', txOnline: true };
+    }
+    return realSubscribe(args);
+  };
+  const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
+  const r = await swap.swap(main.id, spare.id);
+  assert.equal(r.ok, true, JSON.stringify(r.steps));
+  assert.ok(r.steps.some((s) => /sending again/.test(s.text)));
+  assert.equal(engine.rxState('Console', 1).subscribedChannel, '09');
+});
+
+test('edits are refused while a swap runs and a bad field leaves a card untouched', async () => {
+  const { store } = tmpStore();
+  const ch = store.addChannel({ name: 'A', tx: { device: 'RF', channel: 1 } });
+  assert.throws(() => store.updateChannel(ch.id, { name: 'Renamed', tx: { device: '', channel: 1 } }), ShowError);
+  assert.equal(store.channel(ch.id).name, 'A', 'rename not applied when another field is invalid');
+  assert.throws(() => store.addReceiver({ brand: 'constructor', host: '1.2.3.4' }), /Unknown receiver brand/);
+  assert.throws(() => store.addChannel({ name: 'B', tx: { device: 'x'.repeat(70), channel: 1 } }), /too long/);
 });

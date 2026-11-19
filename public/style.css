@@ -28,6 +28,7 @@
 [hidden] { display: none !important; }
 
 html, body { height: 100%; }
+@supports (height: 100dvh) { body { height: 100dvh; } }
 
 body {
   background: var(--bg-base);
@@ -219,7 +220,7 @@ body.editing .card-gear { display: flex; }
 
 /* History drawer */
 .history-drawer {
-  position: fixed; right: 16px; bottom: 96px; width: 460px; max-height: 60vh; overflow: auto;
+  position: fixed; right: 16px; bottom: 96px; width: 460px; max-width: calc(100vw - 32px); max-height: 60vh; overflow: auto;
   background: #10131a; border: 1px solid var(--border-active); border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); z-index: 200; padding: 10px 14px;
 }
 .drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -330,6 +331,8 @@ body.editing .card-gear { display: flex; }
   .swap-actions { justify-content: stretch; }
   .btn-swap { flex: 1; justify-content: center; }
   :root { --card-w: 150px; }
+  .sel-box { min-width: 0; flex: 1; }
+  .selection { gap: 6px; }
 }
 
 /* Drag-to-reorder (Edit mode) */

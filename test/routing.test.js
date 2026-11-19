@@ -169,8 +169,8 @@ test('receiversOf finds every Rx fed by a Tx path, by friendly or canonical name
     ]),
     from('169.254.1.20')
   );
-  assert.deepEqual(engine.receiversOf('RF-Rack', 1), [{ device: 'Console', ip: '169.254.1.20', channel: 1 }]);
-  assert.deepEqual(engine.receiversOf('RF-Rack', 2), [{ device: 'Console', ip: '169.254.1.20', channel: 2 }]);
+  assert.deepEqual(engine.receiversOf('RF-Rack', 1), [{ device: 'Console', ip: '169.254.1.20', channel: 1, online: true }]);
+  assert.deepEqual(engine.receiversOf('RF-Rack', 2), [{ device: 'Console', ip: '169.254.1.20', channel: 2, online: true }]);
   assert.deepEqual(engine.receiversOf('RF-Rack', 3), []);
   const st = engine.rxState('Console', 3);
   assert.equal(st.subscribedDevice, null);

@@ -178,3 +178,34 @@ test('store: receivers are validated, passwords kept on edit and masked in the p
   store.removeReceiver(r.id);
   assert.equal(store.channel(ch.id).rf, null);
 });
+
+test('Shure: a ">" inside a braced value does not end the frame; stop() during connect leaves nothing running', async (t) => {
+  const { splitFrames } = require('../lib/rf/shure');
+  assert.deepEqual(splitFrames('< REP 1 CHAN_NAME {Vox > Main} >< REP 1 TX_'), { frames: ['< REP 1 CHAN_NAME {Vox > Main} >'], rest: '< REP 1 TX_' });
+  // A server that accepts but never answers: stop() while connecting must destroy the socket.
+  let connections = 0;
+  const server = net.createServer((sock) => {
+    connections++;
+    sock.on('error', () => {});
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const client = new ShureReceiver({ host: '127.0.0.1', port: server.address().port, log: quiet });
+  const statuses = [];
+  client.on('status', (on) => statuses.push(on));
+  client.start();
+  client.stop();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(client.socket, null);
+  assert.equal(client.online, false);
+  assert.ok(!statuses.includes(true), 'never reported online after stop()');
+});
+
+test('SSCv2: odd value shapes are ignored, CRLF event streams parse', () => {
+  const c = new SscRestReceiver({ host: '127.0.0.1', log: quiet, brand: 'sennheiser-ewdx' });
+  assert.doesNotThrow(() => c.applyPaths({ '/api/rf/channels/0': 606000, '/api/channel/0': 'abc', '/api/transmitters/0/battery': null, '/api/channel/0/level': { value: -20 } }));
+  assert.equal(c.snapshot().channels[1].af, -20);
+  // Feed the stream parser the way the response would, with CRLF endings.
+  c.onEvent('event: message\ndata: {"/api/channel/1/level":{"value":-31.5}}');
+  assert.equal(c.snapshot().channels[2].af, -31.5);
+});

@@ -214,6 +214,8 @@
       handleMessage(msg);
     };
     ws.onclose = () => {
+      state.meters = {};
+      state.rf = {};
       setStatus('warning', 'Disconnected — reconnecting…');
       setTimeout(connect, reconnectDelay);
       reconnectDelay = Math.min(reconnectDelay * 2, 5000);
@@ -240,7 +242,13 @@
     } catch {
       data = null;
     }
-    if (!res.ok) throw new Error((data && data.error) || `${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      const err = new Error((data && data.error) || `${res.status} ${res.statusText}`);
+      err.status = res.status;
+      if (data && data.code) err.code = data.code;
+      if (data && data.inUseBy) err.inUseBy = data.inUseBy;
+      throw err;
+    }
     return data;
   }
 
@@ -265,7 +273,7 @@
       case 'devices':
         state.devices = new Map(msg.data.map((d) => [d.ip, d]));
         state.devicesByName = new Map();
-        for (const d of msg.data) state.devicesByName.set(d.name.toLowerCase(), d);
+        for (const d of msg.data) if (d && typeof d.name === 'string') state.devicesByName.set(d.name.toLowerCase(), d);
         renderAll();
         if (modal.open) refreshModalDeviceLists();
         break;
@@ -283,7 +291,11 @@
         break;
       case 'rf':
         state.rf = msg.d || {};
-        if (rxModal.open) renderRxList();
+        state.rfAt = msg.t || Date.now();
+        if (rxModal.open && performance.now() - (state.rxListAt || 0) > 1000) {
+          state.rxListAt = performance.now();
+          renderRxList();
+        }
         break;
       case 'result':
         state.history.unshift(msg.data);
@@ -390,6 +402,28 @@
     els.showCounts.textContent = `${state.show.channels.length} ch · ${state.show.spares.length} spare${state.show.spares.length === 1 ? '' : 's'}`;
   }
 
+  /** Cards are selectable with the keyboard: Enter or Space acts as a tap. */
+  function makeKeyboardCard(root) {
+    root.tabIndex = 0;
+    root.setAttribute('role', 'button');
+    root.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        root.click();
+      }
+    });
+  }
+
+  function forgetMeterState(id) {
+    for (const key of [...state.holds.keys()]) if (key.startsWith(`${id}|`)) state.holds.delete(key);
+    for (const key of [...state.clipUntil.keys()]) if (key.startsWith(`${id}|`)) state.clipUntil.delete(key);
+  }
+
+  /** Write a style/text property only when it changes (these run every animation frame). */
+  function setIfChanged(target, prop, value) {
+    if (target[prop] !== value) target[prop] = value;
+  }
+
   function createMeterRow(label) {
     const row = el('div', 'meter-row');
     const lab = row.appendChild(el('span', 'meter-label', label));
@@ -438,6 +472,7 @@
         if (sizer) sizer.unobserve(view.root);
         view.root.remove();
         cardViews.delete(id);
+        forgetMeterState(id);
       }
     }
     els.channelsEmpty.hidden = state.show.channels.length > 0;
@@ -450,7 +485,7 @@
         cardViews.set(ch.id, view);
       }
       updateChannelCard(view, ch);
-      if (drag.kind) continue; // keep the operator's drag preview in place
+      if (drag.kind && view.root.parentNode) continue; // keep the operator's drag preview in place
       if (previous ? previous.nextSibling !== view.root : els.grid.firstChild !== view.root) {
         if (previous) previous.after(view.root);
         else els.grid.prepend(view.root);
@@ -462,6 +497,7 @@
   function createChannelCard(id) {
     const root = el('article', 'card');
     root.dataset.id = id;
+    makeKeyboardCard(root);
     const p = createPic();
     const body = el('div', 'card-body');
     const name = body.appendChild(el('div', 'card-name'));
@@ -492,7 +528,7 @@
   function updateChannelCard(view, ch) {
     const status = channelStatus(ch);
     view.status = status;
-    view.root.className = `card ${status.kind}${state.selectedChannel === ch.id ? ' selected' : ''}${drag.id === ch.id ? ' dragging' : ''}`;
+    view.root.className = `card ${status.kind}${state.selectedChannel === ch.id ? ' selected' : ''}${drag.id === ch.id ? ' dragging' : ''}${view.root.classList.contains('drop-target') ? ' drop-target' : ''}`;
     view.root.draggable = state.editing;
     setPic(view, ch.image, ch.name);
     view.badge.className = `card-badge ${status.kind}`;
@@ -536,6 +572,7 @@
       if (!ids.has(id)) {
         view.root.remove();
         spareViews.delete(id);
+        forgetMeterState(id);
       }
     }
     els.sparesEmpty.hidden = state.show.spares.length > 0;
@@ -547,7 +584,7 @@
         spareViews.set(sp.id, view);
       }
       updateSpareCard(view, sp);
-      if (drag.kind) continue;
+      if (drag.kind && view.root.parentNode) continue;
       if (previous ? previous.nextSibling !== view.root : els.sparesList.firstChild !== view.root) {
         if (previous) previous.after(view.root);
         else els.sparesList.prepend(view.root);
@@ -559,6 +596,7 @@
   function createSpareCard(id) {
     const root = el('article', 'card spare-card');
     root.dataset.id = id;
+    makeKeyboardCard(root);
     const p = createPic();
     const body = el('div', 'card-body');
     const name = body.appendChild(el('div', 'card-name'));
@@ -586,7 +624,7 @@
   function updateSpareCard(view, sp) {
     const status = spareStatus(sp);
     view.status = status;
-    view.root.className = `card spare-card ${status.kind}${state.selectedSpare === sp.id ? ' selected' : ''}${drag.id === sp.id ? ' dragging' : ''}`;
+    view.root.className = `card spare-card ${status.kind}${state.selectedSpare === sp.id ? ' selected' : ''}${drag.id === sp.id ? ' dragging' : ''}${view.root.classList.contains('drop-target') ? ' drop-target' : ''}`;
     view.root.draggable = state.editing;
     // A spare in use inherits the main's picture (and shows the main's name).
     const main = status.main;
@@ -708,7 +746,16 @@
     const ch = channelById(state.selectedChannel);
     const sp = spareById(state.selectedSpare);
     if (!ch || !sp) return;
-    await runRouting(() => api('POST', '/api/swap', { channelId: ch.id, spareId: sp.id }));
+    await runRouting(async () => {
+      try {
+        return await api('POST', '/api/swap', { channelId: ch.id, spareId: sp.id });
+      } catch (err) {
+        if (err.code !== 'spare-in-use') throw err;
+        const who = err.inUseBy ? err.inUseBy.name : 'another channel';
+        if (!window.confirm(`${sp.name} is carrying ${who}. Take it for ${ch.name} and leave ${who} UNPATCHED?`)) return null;
+        return api('POST', '/api/swap', { channelId: ch.id, spareId: sp.id, force: true });
+      }
+    });
   });
 
   els.restore.addEventListener('click', async () => {
@@ -863,17 +910,27 @@
     for (const [id, view] of cardViews) {
       const ch = channelById(id);
       if (!ch) continue;
-      const clipTx = renderOneMeter(view.txMeter, `${id}|tx`, levelFor(ch.tx, 'tx'), now);
-      const clipRx = renderOneMeter(view.rxMeter, `${id}|rx`, levelFor(ch.rx, 'rx'), now);
-      view.root.classList.toggle('clipped', clipTx || clipRx);
-      renderRfBlock(view.rf, ch);
+      try {
+        const clipTx = renderOneMeter(view.txMeter, `${id}|tx`, levelFor(ch.tx, 'tx'), now);
+        const clipRx = renderOneMeter(view.rxMeter, `${id}|rx`, levelFor(ch.rx, 'rx'), now);
+        view.root.classList.toggle('clipped', clipTx || clipRx);
+        renderRfBlock(view.rf, ch);
+      } catch (err) {
+        if (!view.warned) console.error('[meters]', ch.name, err);
+        view.warned = true;
+      }
     }
     for (const [id, view] of spareViews) {
       const sp = spareById(id);
       if (!sp) continue;
-      renderOneMeter(view.meter, `${id}|tx`, levelFor(sp.tx, 'tx'), now);
-      if (sp.rx) renderOneMeter(view.rxMeter, `${id}|rx`, levelFor(sp.rx, 'rx'), now);
-      renderRfBlock(view.rf, sp);
+      try {
+        renderOneMeter(view.meter, `${id}|tx`, levelFor(sp.tx, 'tx'), now);
+        if (sp.rx) renderOneMeter(view.rxMeter, `${id}|rx`, levelFor(sp.rx, 'rx'), now);
+        renderRfBlock(view.rf, sp);
+      } catch (err) {
+        if (!view.warned) console.error('[meters]', sp.name, err);
+        view.warned = true;
+      }
     }
   }
 
@@ -981,8 +1038,13 @@
 
   f.close.addEventListener('click', closeModal);
   f.cancel.addEventListener('click', closeModal);
+  let pressedOnBackdrop = false;
+  f.backdrop.addEventListener('mousedown', (e) => {
+    pressedOnBackdrop = e.target === f.backdrop;
+  });
   f.backdrop.addEventListener('click', (e) => {
-    if (e.target === f.backdrop) closeModal();
+    if (e.target === f.backdrop && pressedOnBackdrop) closeModal();
+    pressedOnBackdrop = false;
   });
 
   function updatePicPreview() {
@@ -1008,15 +1070,24 @@
     updatePicPreview();
   });
 
-  f.picFile.addEventListener('change', async () => {
-    const file = f.picFile.files && f.picFile.files[0];
-    if (!file) return;
+  /** Shrink a picture for the dialog; Save waits while this runs. */
+  async function takePicture(file) {
+    modal.shrinking = (modal.shrinking || 0) + 1;
+    f.save.disabled = true;
     try {
       modal.pendingDataUrl = await shrinkImage(file, IMAGE_MAX_PX);
       updatePicPreview();
     } catch (err) {
       toast(`Could not read picture: ${err.message}`, true);
+    } finally {
+      modal.shrinking--;
+      if (!modal.shrinking) f.save.disabled = false;
     }
+  }
+
+  f.picFile.addEventListener('change', () => {
+    const file = f.picFile.files && f.picFile.files[0];
+    if (file) takePicture(file);
   });
 
   /** Downscale to fit `max` px on the long side and encode as JPEG (or PNG when transparent). */
@@ -1026,6 +1097,7 @@
       const img = new Image();
       img.onload = () => {
         URL.revokeObjectURL(url);
+        if (!img.naturalWidth || !img.naturalHeight) return reject(new Error('the image has no size (SVG and some formats are not supported)'));
         const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
         const w = Math.max(1, Math.round(img.naturalWidth * scale));
         const h = Math.max(1, Math.round(img.naturalHeight * scale));
@@ -1045,11 +1117,17 @@
 
   // --- picture drag-and-drop / paste ---
 
+  const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?)$/i;
+  const looksLikeImage = (f) => Boolean(f) && (f.type.startsWith('image/') || (!f.type && IMAGE_EXT.test(f.name || '')));
+
   function imageFileFrom(dataTransfer) {
     if (!dataTransfer) return null;
-    for (const f of dataTransfer.files || []) if (f.type.startsWith('image/')) return f;
+    for (const f of dataTransfer.files || []) if (looksLikeImage(f)) return f;
     for (const item of dataTransfer.items || []) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) return item.getAsFile();
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (looksLikeImage(f)) return f;
+      }
     }
     return null;
   }
@@ -1105,26 +1183,24 @@
   }
 
   // Settings dialog: drop onto the picture area, or paste an image anywhere while it is open.
-  attachImageDrop(f.picRow, async (file) => {
-    try {
-      modal.pendingDataUrl = await shrinkImage(file, IMAGE_MAX_PX);
-      updatePicPreview();
-    } catch (err) {
-      toast(`Could not read picture: ${err.message}`, true);
-    }
-  });
-  document.addEventListener('paste', async (e) => {
+  attachImageDrop(f.picRow, (file) => takePicture(file));
+  document.addEventListener('paste', (e) => {
     if (!modal.open) return;
     const file = imageFileFrom(e.clipboardData);
     if (!file) return;
     e.preventDefault();
-    try {
-      modal.pendingDataUrl = await shrinkImage(file, IMAGE_MAX_PX);
-      updatePicPreview();
-    } catch (err) {
-      toast(`Could not read picture: ${err.message}`, true);
-    }
+    takePicture(file);
   });
+  // 1. A file dropped anywhere else must not navigate the tab away from the app.
+  document.addEventListener('dragover', (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  });
+  // 5. A card drag whose dragend never fires (the card was removed mid-drag) must not block rendering.
+  document.addEventListener('dragend', () => finishDrag());
+  document.addEventListener('drop', () => setTimeout(finishDrag, 0));
 
   // --- device / channel pickers ---
 
@@ -1326,7 +1402,7 @@
   function renderRssi(bar, dbm, active) {
     const has = typeof dbm === 'number';
     const pct = has ? Math.max(0, Math.min(1, (dbm - RSSI_MIN) / (RSSI_MAX - RSSI_MIN))) : 0;
-    bar.fill.style.width = `${Math.round(pct * 100)}%`;
+    setIfChanged(bar.fill.style, 'width', `${Math.round(pct * 100)}%`);
     bar.lab.classList.toggle('active', Boolean(active));
     const text = has ? `${Math.round(dbm)} dBm` : '—';
     if (bar.readout.textContent !== text) bar.readout.textContent = text;
@@ -1338,22 +1414,22 @@
     const ch = r && r.ch;
     block.root.classList.toggle('offline', !r || r.receiverOffline);
     const now = performance.now();
-    const stale = !ch || (ch.updatedAt && Date.now() - ch.updatedAt > 5000);
+    const stale = !ch || (ch.updatedAt && (state.rfAt || Date.now()) - ch.updatedAt > 5000);
     // AF: dBFS from the receiver (Sennheiser gives -138.5..0, Shure -120..0).
     const afByte = ch && typeof ch.af === 'number' && !stale ? Math.max(1, Math.min(253, Math.round(1 - ch.af * 2))) : null;
     renderOneMeter(block.af, `${item.id}|af`, afByte, now);
     renderRssi(block.a, ch && !stale ? ch.rssi[0] : null, ch && ch.antennas[0] === 'B');
     renderRssi(block.b, ch && !stale ? ch.rssi[1] : null, ch && ch.antennas[1] === 'B');
     const q = ch && !stale && typeof ch.quality === 'number' ? ch.quality : null;
-    block.q.fill.style.width = `${q === null ? 0 : q}%`;
-    block.q.readout.textContent = q === null ? '—' : `${Math.round(q)}%`;
+    setIfChanged(block.q.fill.style, 'width', `${q === null ? 0 : Math.round(q)}%`);
+    setIfChanged(block.q.readout, 'textContent', q === null ? '—' : `${Math.round(q)}%`);
     const pct = ch && typeof ch.battery.percent === 'number' ? ch.battery.percent : ch && typeof ch.battery.bars === 'number' ? ch.battery.bars * 20 : null;
-    block.bat.fill.style.width = `${pct === null ? 0 : pct}%`;
+    setIfChanged(block.bat.fill.style, 'width', `${pct === null ? 0 : Math.round(pct)}%`);
     block.bat.track.classList.toggle('low', pct !== null && pct <= 30);
     block.bat.track.classList.toggle('critical', pct !== null && pct <= 12);
     const mins = ch && typeof ch.battery.minutes === 'number' ? ch.battery.minutes : null;
-    block.bat.readout.textContent = pct === null ? '—' : mins !== null ? `${pct}% ${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}` : `${pct}%`;
-    block.bat.readout.title = mins !== null ? `${mins} min remaining` : '';
+    setIfChanged(block.bat.readout, 'textContent', pct === null ? '—' : mins !== null ? `${pct}% ${Math.floor(mins / 60)}:${String(mins % 60).padStart(2, '0')}` : `${pct}%`);
+    setIfChanged(block.bat.readout, 'title', mins !== null ? `${mins} min remaining` : '');
 
     const bits = [];
     if (!r) bits.push(['off', 'no receiver']);
@@ -1387,6 +1463,12 @@
       opt.value = r.id;
       if (current && current.receiverId === r.id) opt.selected = true;
       sel.appendChild(opt);
+    }
+    if (current && !(state.show.receivers || []).some((r) => r.id === current.receiverId)) {
+      const gone = el('option', null, '(receiver no longer configured)');
+      gone.value = current.receiverId;
+      gone.selected = true;
+      sel.appendChild(gone);
     }
     fillRfChannels(current ? current.channel : 1);
   }
@@ -1453,8 +1535,13 @@
 
   els.receivers.addEventListener('click', () => openRxModal(null));
   rx.close.addEventListener('click', closeRxModal);
+  let pressedOnRxBackdrop = false;
+  rx.backdrop.addEventListener('mousedown', (e) => {
+    pressedOnRxBackdrop = e.target === rx.backdrop;
+  });
   rx.backdrop.addEventListener('click', (e) => {
-    if (e.target === rx.backdrop) closeRxModal();
+    if (e.target === rx.backdrop && pressedOnRxBackdrop) closeRxModal();
+    pressedOnRxBackdrop = false;
   });
   rx.newBtn.addEventListener('click', () => fillRxForm(null));
 

@@ -84,6 +84,19 @@ function main() {
     if (config.open) openBrowser(localUrl);
   });
 
+  // Last resort: a bug in a packet handler or timer must not take the show
+  // down. Log it, make sure the show file is on disk, and keep running.
+  for (const event of ['uncaughtException', 'unhandledRejection']) {
+    process.on(event, (err) => {
+      log.error(`[Server] ${event}:`, err && err.stack ? err.stack : err);
+      try {
+        store.saveNow();
+      } catch {
+        // nothing more to do
+      }
+    });
+  }
+
   let shuttingDown = false;
   const shutdown = (signal) => {
     if (shuttingDown) return;
