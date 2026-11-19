@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0"
+pushd "%~dp0"
 title Dante Spare Swap
 set "PATH=%PATH%;%ProgramFiles%\nodejs"
 

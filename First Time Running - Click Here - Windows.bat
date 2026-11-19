@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+pushd "%~dp0"
 title Dante Spare Swap - First Time Setup
 
 echo ========================================================
