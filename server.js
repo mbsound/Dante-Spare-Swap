@@ -11,7 +11,7 @@ const { createLogger } = require('./lib/log');
 const { DanteEngine } = require('./lib/dante/engine');
 const { DemoEngine } = require('./lib/dante/simulator');
 const { IdentityResolver } = require('./lib/dante/identity');
-const { listInterfaces, openBrowser } = require('./lib/dante/network');
+const { listInterfaces, openBrowser, resolveInterface } = require('./lib/dante/network');
 const { ShowStore } = require('./lib/show/store');
 const { SwapController } = require('./lib/show/swap');
 const { RfManager } = require('./lib/rf/manager');
@@ -48,9 +48,35 @@ function main() {
   const store = new ShowStore({ dataDir: config.dataDir, log });
   store.load();
   const swap = new SwapController({ engine, store, log });
-  const rf = new RfManager({ store, log, simulate: config.demo });
-  const discovery = config.demo ? null : new ReceiverDiscovery({ log, boundIp: config.nic && /^\d+\./.test(config.nic) ? config.nic : null, shure: store.show.settings.shureDiscovery });
-  if (discovery) store.on('change', (show) => discovery.setShureEnabled(show.settings && show.settings.shureDiscovery));
+  /**
+   * The adapter receivers are reached and browsed on: the show's rfInterface
+   * setting (an adapter name or address, or "all"), else the adapter Dante is
+   * bound to. Returns { preferred, interfaces } for the manager and discovery.
+   */
+  const rfNetwork = () => {
+    const setting = (store.show.settings && store.show.settings.rfInterface) || '';
+    if (setting.toLowerCase() === 'all') return { preferred: null, interfaces: null };
+    const chosen = setting ? resolveInterface(setting) : null;
+    if (setting && !chosen) log.warn(`[RF] Receiver adapter "${setting}" is not present; using Dante's adapter until it is.`);
+    const iface = chosen || engine.iface || null;
+    return { preferred: iface, interfaces: iface ? [iface.address] : null };
+  };
+  const rf = new RfManager({ store, log, simulate: config.demo, preferredInterface: () => rfNetwork().preferred });
+  const discovery = config.demo ? null : new ReceiverDiscovery({ log, interfaces: rfNetwork().interfaces, shure: store.show.settings.shureDiscovery });
+  const applyRfNetwork = () => {
+    if (!discovery) return;
+    discovery.setInterfaces(rfNetwork().interfaces);
+    discovery.setTargets(store.show.receivers.filter((r) => r.brand === 'shure-ad').map((r) => r.host));
+  };
+  applyRfNetwork();
+  store.on('change', (show) => {
+    if (discovery) discovery.setShureEnabled(show.settings && show.settings.shureDiscovery);
+    applyRfNetwork();
+  });
+  engine.on('interface', () => {
+    applyRfNetwork();
+    rf.sync();
+  });
   const web = createWebServer({ engine, store, swap, rf, discovery, version, log });
   const localUrl = `http://localhost:${config.port}`;
 

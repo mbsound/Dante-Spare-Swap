@@ -1531,8 +1531,40 @@
     channels: $('rxChannels'),
     del: $('btnDeleteRx'),
     save: $('btnSaveRx'),
-    shure: $('rxShureDiscovery')
+    shure: $('rxShureDiscovery'),
+    iface: $('rxInterface')
   };
+
+  function fillRxInterface() {
+    const sel = rx.iface;
+    const current = (state.show.settings && state.show.settings.rfInterface) || '';
+    sel.textContent = '';
+    const same = el('option', null, 'Same as Dante');
+    same.value = '';
+    const all = el('option', null, 'All adapters');
+    all.value = 'all';
+    sel.append(same, all);
+    let matched = current === '' || current.toLowerCase() === 'all';
+    for (const nic of state.interfaces) {
+      const opt = el('option', null, `${nic.name} - ${nic.address}${nic.isDanteLinkLocal ? ' [Dante]' : ''}`);
+      opt.value = nic.address;
+      if (current === nic.address || current.toLowerCase() === nic.name.toLowerCase()) matched = true;
+      sel.appendChild(opt);
+    }
+    if (!matched) {
+      const gone = el('option', null, `${current} (not present)`);
+      gone.value = current;
+      sel.appendChild(gone);
+    }
+    sel.value = current.toLowerCase() === 'all' ? 'all' : current;
+    if (sel.value !== (current.toLowerCase() === 'all' ? 'all' : current)) sel.value = state.interfaces.find((n) => n.name.toLowerCase() === current.toLowerCase())?.address || '';
+  }
+
+  rx.iface.addEventListener('change', () => {
+    api('PATCH', '/api/show', { settings: { rfInterface: rx.iface.value } })
+      .then(() => setTimeout(refreshDiscovered, 1500))
+      .catch((err) => toast(err.message, true));
+  });
 
   rx.shure.addEventListener('change', () => {
     api('PATCH', '/api/show', { settings: { shureDiscovery: rx.shure.checked } })
@@ -1576,6 +1608,7 @@
       const data = await api('GET', '/api/receivers');
       rxModal.discovered = data.discovered || [];
       rx.shure.checked = Boolean(state.show.settings && state.show.settings.shureDiscovery);
+      fillRxInterface();
       renderRxList();
     } catch {
       // ignore

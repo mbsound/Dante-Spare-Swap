@@ -82,7 +82,7 @@ On restore, the spare's own transmitter is patched back into its monitor input. 
 
 A card can also be linked to a channel on an RF receiver, so the operator sees the pack itself, not just its Dante audio. This is a choice per card: **Dante meters**, **RF parameters**, or **both**. RF parameters are AF level, RF A and B with the active antenna highlighted, link quality, transmitter battery with time remaining, transmitter name and model, frequency, mute and warnings such as interference. Cards with no receiver link behave as before.
 
-Add receivers with the **Receivers** button, then pick the receiver and channel in the card's settings. Sennheiser units are found on the network by mDNS. Looking for Shure units (an SLP service request, multicast every 10 s) is **off by default**; tick **Look for Shure units** in the Receivers dialog to turn it on. The setting is saved with the show.
+Add receivers with the **Receivers** button, then pick the receiver and channel in the card's settings. If the RF racks live on a different network from Dante, choose that adapter under **Receiver network adapter** in the Receivers dialog (or "All adapters"); discovery and the connections to the receivers then use it. On wide subnets (a /14, say) where more than one adapter holds a receiver's address, the chosen adapter is used rather than whichever the operating system picks. Sennheiser units are found on the network by mDNS. Looking for Shure units (an SLP service request, multicast every 5 s, plus a direct request to each configured Shure receiver) is **off by default**; tick **Look for Shure units** in the Receivers dialog to turn it on. The setting is saved with the show.
 
 ![Receivers](Screenshots/Receivers.png)
 

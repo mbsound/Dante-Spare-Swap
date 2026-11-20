@@ -153,7 +153,7 @@ test('SLP: a service request is well-formed and an AttrRply from a Shure unit is
   header.writeUInt16BE(lang.length, 12);
   lang.copy(header, 14);
   const r = parseAttrRply(Buffer.concat([header, body]));
-  assert.deepEqual(r, { fctn: 'AD4Q_RX', name: 'Rack A', ip: '192.168.1.50' });
+  assert.deepEqual(r, { fctn: 'AD4Q_RX', name: 'Rack A', ip: '192.168.1.50', port: 57383 });
 });
 
 test('store: receivers are validated, passwords kept on edit and masked in the public snapshot; links follow deletes', () => {
@@ -212,14 +212,14 @@ test('SSCv2: odd value shapes are ignored, CRLF event streams parse', () => {
 
 test('discovery: no SLP socket or query unless Shure discovery is on; toggling works while running', () => {
   const { ReceiverDiscovery } = require('../lib/rf/discovery');
-  const d = new ReceiverDiscovery({ log: quiet });
+  const d = new ReceiverDiscovery({ log: quiet, interfaces: ['10.0.0.1'] });
   const opened = [];
   d.openSlp = () => {
     opened.push('slp');
-    d.slp = { send: () => opened.push('slp-query'), close() {} };
+    d.slp = { send: () => opened.push('slp-query'), setMulticastInterface() {}, close() {} };
   };
   d.openMdns = () => {
-    d.mdns = { send() {}, close() {} };
+    d.mdns = { send() {}, setMulticastInterface() {}, close() {} };
   };
   d.start();
   assert.deepEqual(opened, [], 'SLP not opened by default');
@@ -232,4 +232,51 @@ test('discovery: no SLP socket or query unless Shure discovery is on; toggling w
   assert.equal(d.slp, null);
   assert.equal(d.list().length, 0, 'Shure units found are forgotten when turned off');
   d.stop();
+});
+
+test('discovery: ANX4 adverts (MCR_AD…) are recognised; interfaces can change while running', () => {
+  const { ReceiverDiscovery, modelOf, parseAttrRply } = require('../lib/rf/discovery');
+  assert.equal(modelOf('AD4Q_RX'), 'AD4Q');
+  assert.equal(modelOf('MCR_AD_RX'), 'ANX4');
+  assert.equal(modelOf('ULXD4Q_RX'), null);
+  const attrs = '(cid=0E8B91F0-AAAA-BBBB-CCCC-DDDDEEEEFFFF),(acn-fctn=MCR_AD_RX),(acn-uacn=Rack B),(csl-esta.dmp=esta.sdt/10.1.2.3:57383;esta.dmp/d)';
+  const lang = Buffer.from('en');
+  const body = Buffer.concat([Buffer.alloc(2), Buffer.from([attrs.length >> 8, attrs.length & 0xff]), Buffer.from(attrs)]);
+  const header = Buffer.alloc(14 + lang.length);
+  header[0] = 2;
+  header[1] = 7;
+  header.writeUInt16BE(lang.length, 12);
+  lang.copy(header, 14);
+  assert.deepEqual(parseAttrRply(Buffer.concat([header, body])), { fctn: 'MCR_AD_RX', name: 'Rack B', ip: '10.1.2.3', port: 57383 });
+
+  const d = new ReceiverDiscovery({ log: quiet, interfaces: ['10.0.0.1'], shure: true });
+  const opened = [];
+  d.openMulticast = (name) => {
+    opened.push(name);
+    d[name] = { send() {}, setMulticastInterface() {}, close() {} };
+  };
+  d.start();
+  assert.deepEqual(opened, ['slp', 'mdns']);
+  d.setInterfaces(['10.0.0.1']); // unchanged: nothing re-opened
+  assert.equal(opened.length, 2);
+  d.setInterfaces(['10.0.0.2']);
+  assert.deepEqual(opened, ['slp', 'mdns', 'slp', 'mdns'], 'both sockets re-opened on the new adapter');
+  d.setTargets(['10.0.0.9', 'not-an-ip']);
+  assert.deepEqual(d.targets, ['10.0.0.9']);
+  d.stop();
+});
+
+test('wide subnets: the preferred adapter is used when it holds the host, receivers bind to it', () => {
+  const { localInterfaceFor } = require('../lib/dante/network');
+  const ifs = [
+    { name: 'en0', address: '10.0.1.5', netmask: '255.252.0.0' },
+    { name: 'en7', address: '10.2.3.4', netmask: '255.252.0.0' }
+  ];
+  assert.equal(localInterfaceFor('10.1.9.9', ifs[1], ifs).name, 'en7', 'a /14 holds the host on both adapters: the chosen one wins');
+  assert.equal(localInterfaceFor('10.1.9.9', null, ifs).name, 'en0');
+  assert.equal(localInterfaceFor('192.168.5.5', ifs[1], ifs).name, 'en7', 'unrouted host: the chosen adapter');
+  assert.equal(localInterfaceFor('169.254.5.5', null, [{ name: 'en0', address: '10.0.1.5', netmask: '255.0.0.0' }, { name: 'en7', address: '169.254.1.1', netmask: '255.255.0.0' }]).name, 'en7');
+  const { ShureReceiver } = require('../lib/rf/shure');
+  const c = new ShureReceiver({ host: '10.1.9.9', log: quiet, localAddress: '10.2.3.4' });
+  assert.equal(c.localAddress, '10.2.3.4');
 });

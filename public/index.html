@@ -183,7 +183,11 @@
           <div class="rx-list-head"><span>Configured</span><button class="btn btn-small btn-primary" type="button" id="btnNewRx">+ Add</button></div>
           <ul class="rx-list" id="rxList"></ul>
           <div class="rx-list-head"><span>Found on the network</span></div>
-          <label class="check rx-opt" title="Sends an SLP service request on the network every 10 seconds; Shure units answer with their name and address. Off unless you turn it on.">
+          <label class="field rx-opt" title="The network adapter receivers are looked for and reached on. Use this when the RF racks are on a different network from Dante.">
+            <span>Receiver network adapter</span>
+            <select id="rxInterface"></select>
+          </label>
+          <label class="check rx-opt" title="Sends an SLP service request on the network every 5 seconds; Shure units answer with their name and address. Off unless you turn it on.">
             <input type="checkbox" id="rxShureDiscovery">
             <span>Look for Shure units (SLP broadcast)</span>
           </label>

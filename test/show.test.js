@@ -282,3 +282,16 @@ test('settings: Shure discovery is off by default and persists when turned on', 
   assert.equal(again.show.settings.shureDiscovery, true);
   assert.throws(() => store.updateSettings('yes'), ShowError);
 });
+
+test('settings: receiver adapter is validated and defaults to following Dante', () => {
+  const { store } = tmpStore();
+  assert.equal(store.show.settings.rfInterface, '');
+  store.updateSettings({ rfInterface: 'en7' });
+  assert.equal(store.show.settings.rfInterface, 'en7');
+  store.updateSettings({ rfInterface: 'all' });
+  assert.equal(store.show.settings.rfInterface, 'all');
+  store.updateSettings({ rfInterface: null });
+  assert.equal(store.show.settings.rfInterface, '');
+  assert.throws(() => store.updateSettings({ rfInterface: 'x'.repeat(70) }), ShowError);
+  assert.throws(() => store.updateSettings({ rfInterface: 'en7; rm' }), ShowError);
+});
