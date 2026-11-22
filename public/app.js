@@ -993,6 +993,11 @@
     rxManual: $('fRxManual'),
     rxChannel: $('fRxChannel'),
     rxCurrent: $('rxCurrent'),
+    txAuto: $('fTxAuto'),
+    txAutoWrap: $('txAutoWrap'),
+    txAutoText: $('txAutoText'),
+    txAutoHint: $('txAutoHint'),
+    txRow: $('txRow'),
     rxLegend: $('rxLegend'),
     monitorWrap: $('monitorWrap'),
     monitor: $('fMonitor'),
@@ -1022,8 +1027,13 @@
     f.del.hidden = !item;
     f.picFile.value = '';
 
-    fillPathEditor('tx', item ? item.tx : null);
     fillPathEditor('rx', item ? item.rx : null);
+    fillPathEditor('tx', item ? item.tx : null);
+    f.txAutoText.textContent = kind === 'channel' ? 'Use whatever the receiver is patched to now' : 'Use whatever the monitor input is patched to now';
+    const inferred = inferredTx();
+    // New cards follow the receiver; existing ones only if their transmitter matches what it carries now.
+    f.txAuto.checked = !item || !item.tx || inferred === null || samePath(inferred, item.tx);
+    applyTxAuto();
     fillRfEditor(item ? item.rf : null);
     for (const r of f.viewRadios()) r.checked = r.value === ((item && item.view) || 'dante');
     updatePicPreview();
@@ -1275,6 +1285,49 @@
     return dev.value === MANUAL ? manual.value.trim() : dev.value;
   }
 
+  /** The transmitter the chosen receive path is subscribed to right now, as a {device, channel}, or null. */
+  function inferredTx() {
+    const p = readPath('rx');
+    const rxDev = p && deviceByName(p.device);
+    const rec = rxDev && rxDev.rx.channels[p.channel];
+    if (!rec || !rec.subscribedDevice) return null;
+    const txDev = deviceByName(rec.subscribedDevice);
+    const device = txDev ? txDev.name : rec.subscribedDevice;
+    const wanted = String(rec.subscribedChannel || '').trim().toLowerCase();
+    let channel = null;
+    if (txDev) {
+      for (const c of Object.values(txDev.tx.channels || {})) {
+        for (const cand of [c.subscriptionName, c.friendlyName, c.canonicalName, c.name]) {
+          if (cand && String(cand).trim().toLowerCase() === wanted) channel = c.number;
+        }
+        if (channel !== null) break;
+      }
+    }
+    if (channel === null) {
+      const m = wanted.match(/^0*(\d+)/);
+      if (m) channel = Number(m[1]);
+    }
+    return channel ? { device, channel, label: `${device} / ${rec.subscribedChannel}` } : null;
+  }
+
+  /** Fill (and lock) the transmitter fields from the receiver's current patch when "auto" is on. */
+  function applyTxAuto() {
+    const auto = f.txAuto.checked;
+    const inf = inferredTx();
+    const rxp = readPath('rx');
+    if (auto && inf) {
+      fillPathEditor('tx', inf);
+      f.txAutoHint.textContent = `${rxp.device} Rx ${rxp.channel} is patched from ${inf.label}`;
+    } else if (auto) {
+      f.txAutoHint.textContent = rxp ? `${rxp.device} Rx ${rxp.channel} has no source right now: choose the transmitter below, or patch it first` : 'Choose the receive path first';
+    } else {
+      f.txAutoHint.textContent = inf ? `Overriding; the receiver currently carries ${inf.label}` : '';
+    }
+    const locked = auto && Boolean(inf);
+    f.txRow.classList.toggle('locked', locked);
+    for (const elx of [f.txDevice, f.txManual, f.txChannel]) elx.disabled = locked;
+  }
+
   function readPath(dir) {
     const device = currentDeviceName(dir);
     const chan = Number((dir === 'tx' ? f.txChannel : f.rxChannel).value);
@@ -1301,20 +1354,34 @@
       manualWrap.hidden = dev.value !== MANUAL;
       if (dev.value === MANUAL) manual.focus();
       fillChannelSelect(chan, currentDeviceName(dir), dir, { channel: Number(chan.value) || 1 });
-      if (dir === 'rx') updateRxCurrent();
+      if (dir === 'rx') {
+        updateRxCurrent();
+        applyTxAuto();
+      }
     });
     manual.addEventListener('input', () => {
       fillChannelSelect(chan, currentDeviceName(dir), dir, { channel: Number(chan.value) || 1 });
-      if (dir === 'rx') updateRxCurrent();
+      if (dir === 'rx') {
+        updateRxCurrent();
+        applyTxAuto();
+      }
     });
-    chan.addEventListener('change', () => dir === 'rx' && updateRxCurrent());
+    chan.addEventListener('change', () => {
+      if (dir === 'rx') {
+        updateRxCurrent();
+        applyTxAuto();
+      }
+    });
   }
+
+  f.txAuto.addEventListener('change', applyTxAuto);
 
   /** Keep pickers current while the dialog is open without losing the operator's choices. */
   function refreshModalDeviceLists() {
     const tx = readPath('tx');
-    fillPathEditor('tx', tx);
     fillPathEditor('rx', readPath('rx'));
+    fillPathEditor('tx', tx);
+    applyTxAuto();
   }
 
   f.form.addEventListener('submit', async (e) => {
@@ -1326,7 +1393,9 @@
         const up = await api('POST', '/api/images', { dataUrl: modal.pendingDataUrl });
         image = up.file;
       }
-      const body = { name: f.name.value.trim(), image, tx: readPath('tx'), rx: readPath('rx'), rf: readRfLink(), view: (f.viewRadios().find((r) => r.checked) || {}).value || 'dante' };
+      const inf = f.txAuto.checked ? inferredTx() : null;
+      const tx = inf ? { device: inf.device, channel: inf.channel } : readPath('tx');
+      const body = { name: f.name.value.trim(), image, tx, rx: readPath('rx'), rf: readRfLink(), view: (f.viewRadios().find((r) => r.checked) || {}).value || 'dante' };
       if (modal.kind === 'channel') body.notes = f.notes.value;
       else body.monitorMain = f.monitor.checked;
       const base = modal.kind === 'channel' ? '/api/channels' : '/api/spares';

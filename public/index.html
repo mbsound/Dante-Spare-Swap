@@ -118,14 +118,6 @@
           <input type="text" id="fName" maxlength="64" required placeholder="e.g. Vocal 1 — Maria">
         </label>
 
-        <fieldset class="path-fieldset" id="txFieldset">
-          <legend>Transmit path (the mic's Dante transmitter)</legend>
-          <div class="path-row">
-            <label class="field grow"><span>Device</span><select id="fTxDevice"></select></label>
-            <label class="field grow" id="fTxManualWrap" hidden><span>Device name</span><input type="text" id="fTxManual" maxlength="64" placeholder="Dante device name"></label>
-            <label class="field ch"><span>Tx channel</span><select id="fTxChannel"></select></label>
-          </div>
-        </fieldset>
 
         <fieldset class="path-fieldset" id="rxFieldset">
           <legend id="rxLegend">Receive path (where it lands, e.g. the console input)</legend>
@@ -139,6 +131,20 @@
             <input type="checkbox" id="fMonitor">
             <span>When this spare is swapped in, patch the <b>main</b> mic's transmitter into this input so the faulty pack can be monitored and fixed. On restore, this spare's own transmitter is patched back here.</span>
           </label>
+        </fieldset>
+
+        <fieldset class="path-fieldset" id="txFieldset">
+          <legend>Transmit path (the mic's Dante transmitter)</legend>
+          <label class="check" id="txAutoWrap">
+            <input type="checkbox" id="fTxAuto" checked>
+            <span id="txAutoText">Use whatever the receiver is patched to now</span>
+          </label>
+          <p class="hint" id="txAutoHint"></p>
+          <div class="path-row" id="txRow">
+            <label class="field grow"><span>Device</span><select id="fTxDevice"></select></label>
+            <label class="field grow" id="fTxManualWrap" hidden><span>Device name</span><input type="text" id="fTxManual" maxlength="64" placeholder="Dante device name"></label>
+            <label class="field ch"><span>Tx channel</span><select id="fTxChannel"></select></label>
+          </div>
         </fieldset>
 
         <fieldset class="path-fieldset" id="rfFieldset">
