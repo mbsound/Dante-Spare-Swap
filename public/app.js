@@ -1255,9 +1255,14 @@
   function fillChannelSelect(select, deviceName, dir, current) {
     select.textContent = '';
     const dev = deviceByName(deviceName);
-    const count = dev && dev[dir].count ? dev[dir].count : 64;
-    const wanted = current ? Number(current.channel) : 1;
-    for (let i = 1; i <= Math.max(count, wanted); i++) {
+    const known = Boolean(dev && dev[dir].count);
+    const count = known ? dev[dir].count : 64;
+    // A known device gets exactly its channels; a previous choice beyond them snaps to 1.
+    // Only an unknown (offline) device keeps a stored channel number the list can't confirm.
+    let wanted = current ? Number(current.channel) : 1;
+    if (!(wanted >= 1) || (known && wanted > count)) wanted = 1;
+    const last = known ? count : Math.max(count, wanted);
+    for (let i = 1; i <= last; i++) {
       const ch = dev && dev[dir].channels[i];
       let label = String(i).padStart(2, '0');
       if (ch && ch.name && ch.name !== `${dir === 'tx' ? 'Tx' : 'Rx'} ${i}`) label += `  ${ch.name}`;
