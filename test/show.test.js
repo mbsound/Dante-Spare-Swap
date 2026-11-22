@@ -111,7 +111,8 @@ test('swap breaks the spare patch, breaks the main patch, patches spare into mai
   const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
   const result = await swap.swap(main.id, spare.id);
   assert.equal(result.ok, true);
-  assert.deepEqual(engine.log, ['unsub Console/30', 'unsub Console/5', 'sub Console/5 <- RF-Rack/4']);
+  // Console/30 is on the same device as the main's receiver: it is exchanged, not broken.
+  assert.deepEqual(engine.log, ['unsub Console/5', 'sub Console/5 <- RF-Rack/4', 'sub Console/30 <- RF-Rack/1']);
   assert.deepEqual(engine.rxState('Console', 5).subscribedChannel, 'Spare A');
   assert.equal(store.channel(main.id).spareId, spare.id);
   assert.equal(store.spare(spare.id).inUseBy, main.id);
@@ -121,6 +122,7 @@ test('swap breaks the spare patch, breaks the main patch, patches spare into mai
   const restored = await swap.restore(main.id);
   assert.equal(restored.ok, true);
   assert.equal(engine.rxState('Console', 5).subscribedChannel, 'Vocal 1');
+  assert.equal(engine.rxState('Console', 30).subscribedChannel, 'Spare A', 'the exchange is undone');
   assert.equal(store.channel(main.id).spareId, null);
   assert.equal(store.spare(spare.id).inUseBy, null);
 });
@@ -176,61 +178,65 @@ test('channels and spares can be reordered; unknown ids are ignored', () => {
   assert.throws(() => store.reorderSpares('x'), ShowError);
 });
 
-test('spare with a monitor path: swap patches the main Tx into it, restore puts the spare Tx back', async () => {
+test('swap exchanges same-device receivers with the main Tx and leaves other devices alone', async () => {
   const { store } = tmpStore();
   const engine = fakeEngine({ txNames: { 'RF|1': 'Vocal 1', 'RF|9': 'Spare A' } });
   const main = store.addChannel({ name: 'Vocal 1', tx: { device: 'RF', channel: 1 }, rx: { device: 'Console', channel: 1 } });
-  const spare = store.addSpare({ name: 'Spare A', tx: { device: 'RF', channel: 9 }, rx: { device: 'Console', channel: 31 }, monitorMain: true });
-  engine.patch('Console', 1, 'RF', 1);
-  engine.patch('Console', 31, 'RF', 9); // spare normally monitored on input 31
+  const spare = store.addSpare({ name: 'Spare A', tx: { device: 'RF', channel: 9 } });
+  engine.patch('Console', 1, 'RF', 1); // main on its own transmitter
+  engine.patch('Console', 31, 'RF', 9); // spare on the console's spare input (same device as the main)
+  engine.patch('Listen', 2, 'RF', 9); // spare also on a listen station (other device)
   const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
 
   const result = await swap.swap(main.id, spare.id);
-  assert.equal(result.ok, true);
+  assert.equal(result.ok, true, JSON.stringify(result.steps));
   assert.deepEqual(engine.log, ['unsub Console/1', 'sub Console/1 <- RF/9', 'sub Console/31 <- RF/1']);
   assert.equal(engine.rxState('Console', 1).subscribedChannel, 'Spare A');
-  assert.equal(engine.rxState('Console', 31).subscribedChannel, 'Vocal 1', 'main pack is on the monitor input');
-  assert.equal(result.steps.filter((s) => /^Verified/.test(s.text)).length, 2);
+  assert.equal(engine.rxState('Console', 31).subscribedChannel, 'Vocal 1', 'the console spare input now carries the main pack');
+  assert.equal(engine.rxState('Listen', 2).subscribedChannel, 'Spare A', 'the listen station keeps the spare');
+  assert.ok(result.steps.some((s) => /Listen Rx 2: left as is/.test(s.text)));
+  assert.deepEqual(store.channel(main.id).exchanged, [{ device: 'Console', channel: 31 }]);
 
   engine.log.length = 0;
   const restored = await swap.restore(main.id);
-  assert.equal(restored.ok, true);
+  assert.equal(restored.ok, true, JSON.stringify(restored.steps));
   assert.deepEqual(engine.log, ['sub Console/1 <- RF/1', 'sub Console/31 <- RF/9']);
   assert.equal(engine.rxState('Console', 31).subscribedChannel, 'Spare A');
+  assert.deepEqual(store.channel(main.id).exchanged, []);
 });
 
-test('spare with a monitor path but the option off: monitor input is simply cleared', async () => {
+test('breakOthers clears the spare from receivers on other devices too', async () => {
   const { store } = tmpStore();
   const engine = fakeEngine();
   const main = store.addChannel({ name: 'A', tx: { device: 'RF', channel: 1 }, rx: { device: 'Console', channel: 1 } });
-  const spare = store.addSpare({ name: 'S', tx: { device: 'RF', channel: 9 }, rx: { device: 'Console', channel: 31 }, monitorMain: false });
+  const spare = store.addSpare({ name: 'S', tx: { device: 'RF', channel: 9 }, breakOthers: true });
   engine.patch('Console', 1, 'RF', 1);
-  engine.patch('Console', 31, 'RF', 9);
+  engine.patch('Listen', 2, 'RF', 9);
   const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
   await swap.swap(main.id, spare.id);
-  assert.deepEqual(engine.log, ['unsub Console/31', 'unsub Console/1', 'sub Console/1 <- RF/9']);
+  assert.deepEqual(engine.log, ['unsub Listen/2', 'unsub Console/1', 'sub Console/1 <- RF/9']);
   engine.log.length = 0;
   await swap.restore(main.id);
-  assert.deepEqual(engine.log, ['sub Console/1 <- RF/1'], 'nothing is re-patched into the monitor input');
+  assert.deepEqual(engine.log, ['sub Console/1 <- RF/1'], 'nothing is re-patched into the listen station');
 });
 
-test('swap guards: monitor path equal to the main Rx, another channel\'s Rx, and a main with no Tx', async () => {
+test('swap guards: a spare feeding another channel\'s receive path on the same device, and a main with no Tx', async () => {
   const { store } = tmpStore();
   const engine = fakeEngine();
   const a = store.addChannel({ name: 'A', tx: { device: 'RF', channel: 1 }, rx: { device: 'Console', channel: 1 } });
   const b = store.addChannel({ name: 'B', tx: { device: 'RF', channel: 2 }, rx: { device: 'Console', channel: 2 } });
   const noTx = store.addChannel({ name: 'NoTx', rx: { device: 'Console', channel: 3 } });
-  const bad1 = store.addSpare({ name: 'S1', tx: { device: 'RF', channel: 9 }, rx: { device: 'Console', channel: 1 }, monitorMain: true });
-  const bad2 = store.addSpare({ name: 'S2', tx: { device: 'RF', channel: 9 }, rx: { device: 'Console', channel: 2 }, monitorMain: true });
-  const good = store.addSpare({ name: 'S3', tx: { device: 'RF', channel: 9 } });
+  const feedsB = store.addSpare({ name: 'S1', tx: { device: 'RF', channel: 9 } });
+  const good = store.addSpare({ name: 'S3', tx: { device: 'RF', channel: 8 } });
+  engine.patch('Console', 1, 'RF', 1);
+  engine.patch('Console', 2, 'RF', 9); // S1 is what B's receiver carries right now
   engine.patch('Console', 3, 'RF', 5);
   const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
-  await assert.rejects(swap.swap(a.id, bad1.id), /same receiver/);
-  await assert.rejects(swap.swap(a.id, bad2.id), /"B"'s receive path/);
-  // A main without a transmit path can be swapped and restored (restore clears its Rx).
+  await assert.rejects(swap.swap(a.id, feedsB.id), /"B"'s receive path/);
+  // A main without a transmitter on record can be swapped and restored (restore clears its Rx).
   const r = await swap.swap(noTx.id, good.id);
   assert.equal(r.ok, true);
-  assert.equal(engine.rxState('Console', 3).subscribedChannel, '09');
+  assert.equal(engine.rxState('Console', 3).subscribedChannel, '08');
   const back = await swap.restore(noTx.id);
   assert.equal(back.ok, true);
   assert.equal(engine.rxState('Console', 3).subscribedDevice, null);

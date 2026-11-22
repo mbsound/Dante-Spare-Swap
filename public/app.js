@@ -163,6 +163,11 @@
     const rec = rxDev.rx.channels[ch.rx.channel];
     if (!rec) return { kind: 'unknown', label: 'RX ?', detail: `${rxDev.name} has not reported Rx ${ch.rx.channel}` };
     if (!rec.subscribedDevice) return { kind: 'unpatched', label: 'UNPATCHED', detail: `${rxDev.name} Rx ${ch.rx.channel} has no source` };
+    if (!ch.tx) {
+      const sp0 = state.show.spares.find((s) => s.tx && rxPointsAt(rec, s.tx));
+      if (sp0) return { kind: 'on-spare', label: `ON SPARE · ${sp0.name}`, detail: `Running on ${sp0.name} (${pathText(sp0.tx)})`, spare: sp0, connected: rec.connected };
+      return { kind: 'other', label: 'NEW SOURCE', detail: `Carrying ${rec.subscribedDevice} / ${rec.subscribedChannel}; open settings and Save to record it as this channel's transmitter`, connected: rec.connected };
+    }
     if (ch.tx && rxPointsAt(rec, ch.tx)) {
       return { kind: 'main', label: rec.connected ? 'MAIN' : 'MAIN · connecting', detail: `On own transmitter ${pathText(ch.tx)}`, connected: rec.connected };
     }
@@ -179,14 +184,6 @@
     const dev = deviceByName(sp.tx.device);
     const online = dev && dev.online;
     if (main) return { kind: 'in-use', label: `→ ${main.name}`, main, online };
-    // Anything on the network currently fed by this spare?
-    let fedBy = null;
-    for (const d of state.devices.values()) {
-      for (const rec of Object.values(d.rx.channels || {})) {
-        if (rxPointsAt(rec, sp.tx)) fedBy = `${d.name} Rx ${rec.number}`;
-      }
-    }
-    if (fedBy) return { kind: 'in-use', label: `PATCHED · ${fedBy}`, main: null, online, fedBy };
     return { kind: 'free', label: online ? 'FREE' : 'FREE · tx offline', main: null, online };
   }
 
@@ -540,7 +537,8 @@
     view.sub.textContent = '';
     if (status.kind === 'on-spare') {
       const sp = status.spare;
-      const monitored = sp.monitorMain && sp.rx && ch.tx ? ` · main pack at ${pathText(sp.rx)}` : '';
+      const ex = (ch.exchanged || []).map((p) => `${p.device} Rx ${p.channel}`);
+      const monitored = ex.length ? ` · main pack now on ${ex.join(', ')}` : '';
       view.sub.appendChild(el('span', 'warn', `Running on spare: ${sp.name}${monitored}`));
     } else if (status.kind === 'unpatched' || status.kind === 'other' || status.kind === 'unknown') {
       view.sub.appendChild(el('span', 'err', status.detail));
@@ -552,11 +550,11 @@
     const rxDev = ch.rx && deviceByName(ch.rx.device);
     view.paths.textContent = '';
     view.paths.append(
-      el('span', ch.tx && !(txDev && txDev.online) ? 'err' : '', `TX ${pathText(ch.tx)}`),
-      '  →  ',
-      el('span', ch.rx && !(rxDev && rxDev.online) ? 'err' : '', `RX ${pathText(ch.rx)}`)
+      el('span', ch.rx && !(rxDev && rxDev.online) ? 'err' : '', `RX ${pathText(ch.rx)}`),
+      '  ←  ',
+      el('span', ch.tx && !(txDev && txDev.online) ? 'err' : '', ch.tx ? pathText(ch.tx) : 'no transmitter on record')
     );
-    view.paths.title = `Transmit: ${ch.tx ? `${ch.tx.device} / ${txChannelLabel(ch.tx)}` : 'not set'}\nReceive: ${pathText(ch.rx)}`;
+    view.paths.title = `Receive: ${pathText(ch.rx)}\nTransmitter on record: ${ch.tx ? `${ch.tx.device} / ${txChannelLabel(ch.tx)}` : 'none yet'}`;
 
     applyView(view, ch, [view.txMeter.row, view.rxMeter.row, view.paths]);
     const standby = status.kind === 'on-spare';
@@ -602,10 +600,9 @@
     const name = body.appendChild(el('div', 'card-name'));
     const sub = body.appendChild(el('div', 'card-sub'));
     const meter = createMeterRow('TX');
-    const rxMeter = createMeterRow('RX');
-    rxMeter.row.hidden = true;
+    const feeding = el('div', 'card-sub feeding');
     const rf = createRfBlock();
-    body.append(meter.row, rxMeter.row, rf.root);
+    body.append(meter.row, feeding, rf.root);
     root.append(p.pic, body);
     root.addEventListener('click', (e) => {
       if (e.target.closest('.card-gear')) return;
@@ -618,7 +615,7 @@
     });
     makeDraggable(root, 'spare', id);
     attachImageDrop(root, (file) => setPictureFromFile('spare', id, file), () => state.editing);
-    return { id, root, ...p, name, sub, meter, rxMeter, rf, status: null };
+    return { id, root, ...p, name, sub, meter, feeding, rf, status: null };
   }
 
   function updateSpareCard(view, sp) {
@@ -635,16 +632,11 @@
     view.sub.textContent = '';
     const txDev = sp.tx && deviceByName(sp.tx.device);
     view.sub.appendChild(el('span', sp.tx && !(txDev && txDev.online) ? 'err' : '', `TX ${pathText(sp.tx)}`));
-    if (status.fedBy) view.sub.append(' · ', el('span', 'warn', status.fedBy));
-    applyView(view, sp, [view.meter.row]);
-    view.rxMeter.row.hidden = !sp.rx || view.danteHidden;
-    if (sp.rx) {
-      const monitoring = main && sp.monitorMain;
-      view.rxMeter.label.textContent = monitoring ? 'MON' : 'RX';
-      view.rxMeter.row.classList.toggle('standby', Boolean(monitoring));
-      view.rxMeter.row.title = monitoring ? `${main.name}'s main pack, monitored at ${pathText(sp.rx)}` : `Monitor input ${pathText(sp.rx)}`;
-      view.sub.append(' · ', el('span', monitoring ? 'warn' : '', monitoring ? `monitoring ${main.name} @ ${pathText(sp.rx)}` : `MON ${pathText(sp.rx)}`));
-    }
+    applyView(view, sp, [view.meter.row, view.feeding]);
+    const list = feedingList(sp.tx);
+    const text = list.length ? `Feeding: ${list.join(', ')}` : 'Not feeding any receiver';
+    if (view.feeding.textContent !== text) view.feeding.textContent = text;
+    view.feeding.title = text;
   }
 
   // ---------------------------------------------------------------------------
@@ -925,8 +917,7 @@
       if (!sp) continue;
       try {
         renderOneMeter(view.meter, `${id}|tx`, levelFor(sp.tx, 'tx'), now);
-        if (sp.rx) renderOneMeter(view.rxMeter, `${id}|rx`, levelFor(sp.rx, 'rx'), now);
-        renderRfBlock(view.rf, sp);
+          renderRfBlock(view.rf, sp);
       } catch (err) {
         if (!view.warned) console.error('[meters]', sp.name, err);
         view.warned = true;
@@ -993,14 +984,12 @@
     rxManual: $('fRxManual'),
     rxChannel: $('fRxChannel'),
     rxCurrent: $('rxCurrent'),
-    txAuto: $('fTxAuto'),
-    txAutoWrap: $('txAutoWrap'),
-    txAutoText: $('txAutoText'),
-    txAutoHint: $('txAutoHint'),
-    txRow: $('txRow'),
     rxLegend: $('rxLegend'),
-    monitorWrap: $('monitorWrap'),
-    monitor: $('fMonitor'),
+    rxBound: $('rxBound'),
+    txFieldset: $('txFieldset'),
+    txLegend: $('txLegend'),
+    txFeeding: $('txFeeding'),
+    breakOthers: $('fBreakOthers'),
     rfReceiver: $('fRfReceiver'),
     rfChannel: $('fRfChannel'),
     viewRadios: () => [...document.querySelectorAll('input[name="view"]')],
@@ -1019,21 +1008,19 @@
     f.title.textContent = `${kind === 'channel' ? 'Channel' : 'Spare'} ${item ? 'settings' : '— new'}`;
     f.name.value = item ? item.name : '';
     f.notes.value = item && item.notes ? item.notes : '';
-    f.rxFieldset.hidden = false;
-    f.rxLegend.textContent = kind === 'channel' ? 'Receive path (where it lands, e.g. the console input)' : 'Monitor path (optional: where this spare pack is normally patched for monitoring)';
-    f.monitorWrap.hidden = kind !== 'spare';
-    f.monitor.checked = Boolean(item && item.monitorMain);
+    // A main is its receive path; a spare is its transmit path.
+    f.rxFieldset.hidden = kind !== 'channel';
+    f.txFieldset.hidden = kind !== 'spare';
+    f.breakOthers.checked = Boolean(item && item.breakOthers);
     f.notesWrap.hidden = kind !== 'channel';
     f.del.hidden = !item;
     f.picFile.value = '';
 
+    modal.storedTx = item && kind === 'channel' ? item.tx : null;
     fillPathEditor('rx', item ? item.rx : null);
     fillPathEditor('tx', item ? item.tx : null);
-    f.txAutoText.textContent = kind === 'channel' ? 'Use whatever the receiver is patched to now' : 'Use whatever the monitor input is patched to now';
-    const inferred = inferredTx();
-    // New cards follow the receiver; existing ones only if their transmitter matches what it carries now.
-    f.txAuto.checked = !item || !item.tx || inferred === null || samePath(inferred, item.tx);
-    applyTxAuto();
+    updateRxBound();
+    updateTxFeeding();
     fillRfEditor(item ? item.rf : null);
     for (const r of f.viewRadios()) r.checked = r.value === ((item && item.view) || 'dante');
     updatePicPreview();
@@ -1315,22 +1302,44 @@
     return channel ? { device, channel, label: `${device} / ${rec.subscribedChannel}` } : null;
   }
 
-  /** Fill (and lock) the transmitter fields from the receiver's current patch when "auto" is on. */
-  function applyTxAuto() {
-    const auto = f.txAuto.checked;
-    const inf = inferredTx();
-    const rxp = readPath('rx');
-    if (auto && inf) {
-      fillPathEditor('tx', inf);
-      f.txAutoHint.textContent = `${rxp.device} Rx ${rxp.channel} is patched from ${inf.label}`;
-    } else if (auto) {
-      f.txAutoHint.textContent = rxp ? `${rxp.device} Rx ${rxp.channel} has no source right now: choose the transmitter below, or patch it first` : 'Choose the receive path first';
-    } else {
-      f.txAutoHint.textContent = inf ? `Overriding; the receiver currently carries ${inf.label}` : '';
+  /** Every receiver on the network currently fed by a Tx path, as "Device Rx N" strings. */
+  function feedingList(txPath) {
+    if (!txPath) return [];
+    const out = [];
+    for (const d of state.devices.values()) {
+      for (const rec of Object.values(d.rx.channels || {})) if (rxPointsAt(rec, txPath)) out.push(`${d.name} Rx ${rec.number}`);
     }
-    const locked = auto && Boolean(inf);
-    f.txRow.classList.toggle('locked', locked);
-    for (const elx of [f.txDevice, f.txManual, f.txChannel]) elx.disabled = locked;
+    return out;
+  }
+
+  /** Channel dialog: the transmitter the chosen receiver carries now, read-only, against what is on record. */
+  function updateRxBound() {
+    if (modal.kind !== 'channel') return;
+    f.rxBound.textContent = '';
+    const rxp = readPath('rx');
+    const inf = inferredTx();
+    const stored = modal.storedTx;
+    if (!rxp) return;
+    if (inf) {
+      f.rxBound.append('Carrying now: ', el('b', null, inf.label));
+      if (stored && !samePath(stored, inf)) f.rxBound.append(' · ', el('span', 'warn', `on record: ${pathText(stored)}. Save to accept the current source as this channel's transmitter.`));
+      else if (!stored) f.rxBound.append(' · ', el('span', 'warn', 'Save to record it as this channel\'s transmitter.'));
+    } else {
+      f.rxBound.append('No source right now.');
+      if (stored) f.rxBound.append(' On record: ', el('b', null, pathText(stored)), ' (kept until the receiver carries something else and you save).');
+      else f.rxBound.append(' Patch the mic into this input in Dante Controller, then save, and it will be recorded.');
+    }
+  }
+
+  /** Spare dialog: who the chosen transmitter feeds now, read-only. */
+  function updateTxFeeding() {
+    if (modal.kind !== 'spare') return;
+    const txp = readPath('tx');
+    const list = feedingList(txp);
+    f.txFeeding.textContent = '';
+    if (!txp) return;
+    f.txFeeding.append(list.length ? 'Feeding now: ' : 'Not feeding any receiver right now.');
+    if (list.length) f.txFeeding.append(el('b', null, list.join(', ')));
   }
 
   function readPath(dir) {
@@ -1361,32 +1370,33 @@
       fillChannelSelect(chan, currentDeviceName(dir), dir, { channel: Number(chan.value) || 1 });
       if (dir === 'rx') {
         updateRxCurrent();
-        applyTxAuto();
-      }
+        updateRxBound();
+      } else updateTxFeeding();
     });
     manual.addEventListener('input', () => {
       fillChannelSelect(chan, currentDeviceName(dir), dir, { channel: Number(chan.value) || 1 });
       if (dir === 'rx') {
         updateRxCurrent();
-        applyTxAuto();
-      }
+        updateRxBound();
+      } else updateTxFeeding();
     });
     chan.addEventListener('change', () => {
       if (dir === 'rx') {
         updateRxCurrent();
-        applyTxAuto();
-      }
+        updateRxBound();
+      } else updateTxFeeding();
     });
   }
 
-  f.txAuto.addEventListener('change', applyTxAuto);
+  f.breakOthers.addEventListener('change', () => {});
 
   /** Keep pickers current while the dialog is open without losing the operator's choices. */
   function refreshModalDeviceLists() {
     const tx = readPath('tx');
     fillPathEditor('rx', readPath('rx'));
     fillPathEditor('tx', tx);
-    applyTxAuto();
+    updateRxBound();
+    updateTxFeeding();
   }
 
   f.form.addEventListener('submit', async (e) => {
@@ -1398,11 +1408,15 @@
         const up = await api('POST', '/api/images', { dataUrl: modal.pendingDataUrl });
         image = up.file;
       }
-      const inf = f.txAuto.checked ? inferredTx() : null;
-      const tx = inf ? { device: inf.device, channel: inf.channel } : readPath('tx');
-      const body = { name: f.name.value.trim(), image, tx, rx: readPath('rx'), rf: readRfLink(), view: (f.viewRadios().find((r) => r.checked) || {}).value || 'dante' };
-      if (modal.kind === 'channel') body.notes = f.notes.value;
-      else body.monitorMain = f.monitor.checked;
+      const body = { name: f.name.value.trim(), image, rf: readRfLink(), view: (f.viewRadios().find((r) => r.checked) || {}).value || 'dante' };
+      if (modal.kind === 'channel') {
+        // The transmitter is learned on the server from what this receiver carries.
+        body.rx = readPath('rx');
+        body.notes = f.notes.value;
+      } else {
+        body.tx = readPath('tx');
+        body.breakOthers = f.breakOthers.checked;
+      }
       const base = modal.kind === 'channel' ? '/api/channels' : '/api/spares';
       if (modal.id) await api('PATCH', `${base}/${encodeURIComponent(modal.id)}`, body);
       else await api('POST', base, body);

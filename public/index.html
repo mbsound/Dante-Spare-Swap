@@ -127,24 +127,21 @@
             <label class="field ch"><span>Rx channel</span><select id="fRxChannel"></select></label>
           </div>
           <p class="hint" id="rxCurrent"></p>
-          <label class="check" id="monitorWrap" hidden>
-            <input type="checkbox" id="fMonitor">
-            <span>When this spare is swapped in, patch the <b>main</b> mic's transmitter into this input so the faulty pack can be monitored and fixed. On restore, this spare's own transmitter is patched back here.</span>
-          </label>
+          <p class="hint bound" id="rxBound"></p>
         </fieldset>
 
         <fieldset class="path-fieldset" id="txFieldset">
-          <legend>Transmit path (the mic's Dante transmitter)</legend>
-          <label class="check" id="txAutoWrap">
-            <input type="checkbox" id="fTxAuto" checked>
-            <span id="txAutoText">Use whatever the receiver is patched to now</span>
-          </label>
-          <p class="hint" id="txAutoHint"></p>
+          <legend id="txLegend">Transmit path (the spare pack's Dante transmitter)</legend>
           <div class="path-row" id="txRow">
             <label class="field grow"><span>Device</span><select id="fTxDevice"></select></label>
             <label class="field grow" id="fTxManualWrap" hidden><span>Device name</span><input type="text" id="fTxManual" maxlength="64" placeholder="Dante device name"></label>
             <label class="field ch"><span>Tx channel</span><select id="fTxChannel"></select></label>
           </div>
+          <p class="hint bound" id="txFeeding"></p>
+          <label class="check" id="breakOthersWrap">
+            <input type="checkbox" id="fBreakOthers">
+            <span>When this spare is swapped in, also clear it from receivers on <b>other</b> devices. Off (default): a listen station or anything else on another device keeps hearing the spare; only inputs on the same device as the main's receiver are exchanged.</span>
+          </label>
         </fieldset>
 
         <fieldset class="path-fieldset" id="rfFieldset">

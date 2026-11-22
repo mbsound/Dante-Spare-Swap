@@ -112,3 +112,28 @@ test('REST API: channels, spares, swap and restore', async () => {
     web.close();
   }
 });
+
+test('a channel learns its transmitter from the receiver when saved', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dss-learn-'));
+  const store = new ShowStore({ dataDir: dir, log: quiet });
+  store.load();
+  const engine = fakeEngine();
+  engine.sourceOf = (device, channel) => (device === 'Console' && channel === 5 ? { device: 'RF', channel: 2, channelName: '02', connected: true } : null);
+  const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
+  const web = createWebServer({ engine, store, swap, version: 'test', log: quiet });
+  await new Promise((r) => web.server.listen(0, '127.0.0.1', r));
+  const port = web.server.address().port;
+  try {
+    let r = await request(port, 'POST', '/api/channels', { name: 'Learned', rx: { device: 'Console', channel: 5 } });
+    assert.deepEqual(r.body.tx, { device: 'RF', channel: 2 }, 'transmitter taken from the receiver');
+    const id = r.body.id;
+    r = await request(port, 'POST', '/api/channels', { name: 'Unknown', rx: { device: 'Console', channel: 6 } });
+    assert.equal(r.body.tx, null, 'no source: nothing on record yet');
+    r = await request(port, 'PATCH', `/api/channels/${id}`, { rx: { device: 'Console', channel: 6 } });
+    assert.deepEqual(r.body.tx, { device: 'RF', channel: 2 }, 'moving to a receiver with no source keeps the record');
+    r = await request(port, 'PATCH', `/api/channels/${id}`, { tx: { device: 'RF', channel: 7 } });
+    assert.deepEqual(r.body.tx, { device: 'RF', channel: 7 }, 'an explicit tx is kept as given');
+  } finally {
+    web.close();
+  }
+});

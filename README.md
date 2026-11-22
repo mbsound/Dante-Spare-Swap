@@ -24,7 +24,7 @@ Built on the [Dante Audio Meter Bridge](https://github.com/mbsound/Dante-Meter-B
 
 - [How a show is set up](#how-a-show-is-set-up)
 - [The swap](#the-swap)
-- [Monitoring the faulty pack](#monitoring-the-faulty-pack)
+- [Where the spare was](#where-the-spare-was)
 - [Wireless receivers (optional)](#wireless-receivers-optional)
 - [Quick start](#quick-start)
 - [Options and the show file](#options-and-the-show-file)
@@ -37,12 +37,10 @@ Built on the [Dante Audio Meter Bridge](https://github.com/mbsound/Dante-Meter-B
 
 ## How a show is set up
 
-1. **Channels** are cards, one per RF mic (or any Dante path). Press **+ Channel** and give it a name, a picture (choose, drag-and-drop or paste a headshot; in Edit mode you can also drop an image straight onto a card) and two paths:
-   - **Transmit path**: the Dante transmitter channel the mic arrives on (for example `RF-Rack-A` Tx 3).
-   - **Receive path**: where it lands (for example `FOH-Console` Rx 12).
-2. **Spares** live in the tray on the right. Each spare is a transmit path you hold in reserve (the spare pack on `RF-Rack-B` Tx 7). A spare can also have a **monitor path**: the console input it is normally patched to so it can be checked (see [Monitoring the faulty pack](#monitoring-the-faulty-pack)).
-3. Each card shows two meters, **TX** (the mic's own transmitter) and **RX** (what is actually arriving at the receiver), plus a status badge read live from the receiver's subscription:
-   `MAIN` on its own transmitter, `ON SPARE · name`, `UNPATCHED`, or `OTHER SOURCE`.
+1. **Channels** are cards, one per RF mic (or any Dante path). Press **+ Channel** and give it a name, a picture (choose, drag-and-drop or paste a headshot; in Edit mode you can also drop an image straight onto a card) and its **receive path**: where it lands, for example `FOH-Console` Rx 12. That is all you dictate. The transmitter the receiver is carrying at that moment is read from its subscription, shown read-only, and recorded as the channel's **main transmitter**.
+2. **Spares** live in the tray on the right. Each spare is a **transmit path** you hold in reserve (the spare pack on `RF-Rack-B` Tx 7). Its card lists, read-only and live, every receiver that transmitter is feeding right now.
+3. Each channel card shows two meters, **TX** (the mic's own transmitter) and **RX** (what is actually arriving at the receiver), plus a status badge read live from the receiver's subscription and checked against the record:
+   `MAIN` on its own transmitter, `ON SPARE · name`, `UNPATCHED`, or `OTHER SOURCE` when someone changed the patch in Dante Controller and you should look into it. A card whose transmitter has not been recorded yet shows `NEW SOURCE` until you open its settings and save.
 
 Devices and channels are picked from lists populated by discovery, so names are never typed by hand. In **Edit** mode, drag cards to reorder them. The grid packs densely: two short cards stack beside a tall one.
 
@@ -54,15 +52,15 @@ Devices and channels are picked from lists populated by discovery, so names are 
 
 Tap a channel, tap a spare, press **SWAP**. In the background:
 
-1. If the spare's transmitter is patched to any receiver, those patches are broken.
-2. The channel's own transmitter → receiver patch is broken.
-3. The spare's transmitter is patched into the channel's receiver.
-4. (Optional, see below) the channel's own transmitter is patched into the spare's monitor input.
-5. The receiver is re-read and the result is verified and logged.
+1. The channel's own transmitter → receiver patch is broken.
+2. The spare's transmitter is patched into the channel's receiver.
+3. Any input **on the same device** as the channel's receiver that the spare was feeding (the console's "spare" input, say) is given the channel's own transmitter instead: the two paths are exchanged, so the faulty pack can be heard and worked on where the spare used to be.
+4. Receivers **on other devices** that the spare feeds (a listen station, a recorder) are left exactly as they are (see [Where the spare was](#where-the-spare-was)).
+5. Every receiver touched is re-read and the result is verified and logged.
 
 Afterwards the channel's card goes grey with an **ON SPARE** badge. Its TX meter keeps showing the *main* transmitter, so the faulty pack can be diagnosed while the spare carries the show. In the tray, the spare inherits the channel's picture and name so everyone can see what it is now doing.
 
-**RESTORE MAIN** puts the channel's own transmitter back into its receiver and frees the spare.
+**RESTORE MAIN** puts the channel's own transmitter back into its receiver, puts the spare's transmitter back into every input that was exchanged, and frees the spare.
 
 A spare that is already carrying another channel is not taken silently: SWAP asks first, and if you go ahead the channel it leaves gets its own entry in the history marked UNPATCHED. Cards on a spare, and spares in use, cannot be deleted until restored, and the show cannot be edited while a swap is running. If the receiver does not report the new patch within 1.5 s, it is sent once more before the result is reported.
 
@@ -70,13 +68,13 @@ Every step is a standard Dante receiver subscription change, the same thing Dant
 
 ![Swap](Screenshots/Swap.png)
 
-*Vocal 3 is running on Spare A. The card is greyed with its own pack still metered; Spare A has taken Vocal 3's picture and name and shows a MON meter for the faulty pack. The history drawer lists every step of the swap.*
+*Vocal 3 is running on Spare A. The card is greyed with its own pack still metered; Spare A has taken Vocal 3's picture and name. The history drawer lists every step of the swap.*
 
-## Monitoring the faulty pack
+## Where the spare was
 
-Spare packs are often patched to a console input or listen bus so they can be checked. Give a spare a **Monitor path** in its settings and tick **patch the main mic's transmitter into this input when swapped in**. Then a swap also patches the channel's own (faulty) transmitter into the spare's monitor input, so the console can listen to the bad pack while the spare carries the show. The spare card shows a **MON** meter for it.
+A spare pack is usually patched somewhere already: a spare input on the console, a listen station, a recorder. The app does not know how the audio department wants those used, so it follows one rule: a swap only touches receivers on the **same device** as the channel's receiver, and there it *exchanges* the paths (the spare takes the channel's input, the channel's transmitter takes the spare's old input). Receivers on **other devices** keep hearing the spare.
 
-On restore, the spare's own transmitter is patched back into its monitor input. Leave the option off and the spare's monitor patch is simply cleared during a swap. The option is per spare, so you can mix both behaviours.
+If you would rather the spare were taken away from everything when it goes into service, tick **also clear it from receivers on other devices** in that spare's settings. It is per spare, so you can mix both behaviours.
 
 ## Wireless receivers (optional)
 
@@ -173,7 +171,7 @@ RF receivers ──(TCP/UDP/HTTPS)──┘
 | Routing changes | An ARC subscription message (`0x3010`) to the **receiver**, naming the transmitter device and channel; an empty name clears the subscription. The receiver is re-read 1.5 s later to verify. |
 | Receiver readouts | One client per receiver (see the table above); telemetry is normalised and sent to browsers 5 times a second |
 
-Verified on a theatre network with two Yamaha Rio3224-D and a Dante Virtual Soundcard (all modern-ARC devices): patches in both directions, then a full swap with monitor path and a restore, every step reading back as connected.
+Verified on a theatre network with two Yamaha Rio3224-D and a Dante Virtual Soundcard (all modern-ARC devices): patches in both directions, then a full swap and restore, every step reading back as connected.
 
 ## JSON API
 
@@ -182,8 +180,8 @@ Everything the UI does is available over HTTP, which makes it straightforward to
 | Endpoint | Description |
 |---|---|
 | `GET /api/show` | Channels, spares, receivers and swap state |
-| `POST /api/channels`, `PATCH /api/channels/:id`, `DELETE /api/channels/:id` | Manage cards (`{ name, image, tx:{device,channel}, rx:{device,channel}, notes, rf:{receiverId,channel}, view }`) |
-| `POST /api/spares`, `PATCH /api/spares/:id`, `DELETE /api/spares/:id` | Manage spares (`{ name, image, tx, rx, monitorMain, rf, view }`; `rx` is the optional monitor path) |
+| `POST /api/channels`, `PATCH /api/channels/:id`, `DELETE /api/channels/:id` | Manage cards (`{ name, image, rx:{device,channel}, notes, rf:{receiverId,channel}, view }`). The transmitter is learned from the receiver's subscription when the card is saved; pass `tx` explicitly to set it yourself |
+| `POST /api/spares`, `PATCH /api/spares/:id`, `DELETE /api/spares/:id` | Manage spares (`{ name, image, tx:{device,channel}, breakOthers, rf, view }`) |
 | `POST /api/reorder` | `{ channels: [ids] }` or `{ spares: [ids] }` |
 | `POST /api/images` | `{ dataUrl }` → `{ file }` (picture stored in the data folder) |
 | `POST /api/swap` | `{ channelId, spareId, force? }` → result with each step. 409 with `code: "spare-in-use"` when the spare carries another channel; repeat with `force: true` to take it anyway |
