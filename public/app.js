@@ -634,9 +634,16 @@
     view.sub.appendChild(el('span', sp.tx && !(txDev && txDev.online) ? 'err' : '', `TX ${pathText(sp.tx)}`));
     applyView(view, sp, [view.meter.row, view.feeding]);
     const list = feedingList(sp.tx);
-    const text = list.length ? `Feeding: ${list.join(', ')}` : 'Not feeding any receiver';
-    if (view.feeding.textContent !== text) view.feeding.textContent = text;
-    view.feeding.title = text;
+    const key = list.join('|');
+    if (view.feedingKey !== key) {
+      view.feedingKey = key;
+      view.feeding.textContent = '';
+      if (!list.length) view.feeding.appendChild(el('span', 'feed-none', 'Not feeding any receiver'));
+      else {
+        view.feeding.appendChild(el('span', 'feed-label', `Feeding ${list.length}`));
+        for (const r of list) view.feeding.appendChild(el('span', 'feed-chip', r));
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------

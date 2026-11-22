@@ -183,6 +183,12 @@ body.editing .card-gear { display: flex; }
 .meter-row .readout.active { color: var(--accent-green); }
 .meter-row.no-data .meter-canvas { opacity: 0.4; }
 
+/* Who a spare feeds: wraps onto as many lines as it needs */
+.card-sub.feeding { white-space: normal; overflow: visible; text-overflow: clip; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.feed-label { font-size: 9.5px; font-weight: 800; letter-spacing: 0.5px; color: var(--text-dim); text-transform: uppercase; margin-right: 2px; }
+.feed-chip { padding: 1px 6px; border-radius: 4px; background: #262c3a; color: #cfd6e3; font-size: 10.5px; white-space: nowrap; }
+.feed-none { color: var(--text-dim); }
+
 /* Spare cards */
 .spare-card { flex-direction: row; min-height: 84px; }
 .spare-card .card-pic { width: 96px; flex: none; aspect-ratio: auto; }
