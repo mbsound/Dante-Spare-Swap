@@ -634,14 +634,18 @@
     view.sub.appendChild(el('span', sp.tx && !(txDev && txDev.online) ? 'err' : '', `TX ${pathText(sp.tx)}`));
     applyView(view, sp, [view.meter.row, view.feeding]);
     const list = feedingList(sp.tx);
-    const key = list.join('|');
+    const key = list.map((r) => r.text + ':' + r.mains.join(',')).join('|');
     if (view.feedingKey !== key) {
       view.feedingKey = key;
       view.feeding.textContent = '';
       if (!list.length) view.feeding.appendChild(el('span', 'feed-none', 'Not feeding any receiver'));
       else {
         view.feeding.appendChild(el('span', 'feed-label', `Feeding ${list.length}`));
-        for (const r of list) view.feeding.appendChild(el('span', 'feed-chip', r));
+        for (const r of list) {
+          const chip = el('span', r.mains.length ? 'feed-chip same' : 'feed-chip', r.text);
+          chip.title = r.mains.length ? `Same device as ${r.mains.join(', ')}: exchanged with the main's transmitter when that channel swaps to this spare` : 'On another device: left as is unless the spare is set to swap all receivers';
+          view.feeding.appendChild(chip);
+        }
       }
     }
   }
@@ -1314,7 +1318,12 @@
     if (!txPath) return [];
     const out = [];
     for (const d of state.devices.values()) {
-      for (const rec of Object.values(d.rx.channels || {})) if (rxPointsAt(rec, txPath)) out.push(`${d.name} Rx ${rec.number}`);
+      for (const rec of Object.values(d.rx.channels || {})) {
+        if (!rxPointsAt(rec, txPath)) continue;
+        // A receiver on the same device as a main's receive path is what a swap to that main exchanges.
+        const mains = state.show.channels.filter((c) => c.rx && c.rx.device.toLowerCase() === d.name.toLowerCase());
+        out.push({ text: `${d.name} Rx ${rec.number}`, mains: mains.map((c) => c.name) });
+      }
     }
     return out;
   }
@@ -1346,7 +1355,7 @@
     f.txFeeding.textContent = '';
     if (!txp) return;
     f.txFeeding.append(list.length ? 'Feeding now: ' : 'Not feeding any receiver right now.');
-    if (list.length) f.txFeeding.append(el('b', null, list.join(', ')));
+    if (list.length) f.txFeeding.append(el('b', null, list.map((r) => r.text).join(', ')));
   }
 
   function readPath(dir) {
