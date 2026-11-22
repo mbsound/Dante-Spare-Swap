@@ -194,7 +194,7 @@ test('swap exchanges same-device receivers with the main Tx and leaves other dev
   assert.equal(engine.rxState('Console', 1).subscribedChannel, 'Spare A');
   assert.equal(engine.rxState('Console', 31).subscribedChannel, 'Vocal 1', 'the console spare input now carries the main pack');
   assert.equal(engine.rxState('Listen', 2).subscribedChannel, 'Spare A', 'the listen station keeps the spare');
-  assert.ok(result.steps.some((s) => /Listen Rx 2: left as is/.test(s.text)));
+  assert.ok(result.steps.some((s) => /Listen Rx 2 \(another device\): left as is/.test(s.text)));
   assert.deepEqual(store.channel(main.id).exchanged, [{ device: 'Console', channel: 31 }]);
 
   engine.log.length = 0;
@@ -205,19 +205,21 @@ test('swap exchanges same-device receivers with the main Tx and leaves other dev
   assert.deepEqual(store.channel(main.id).exchanged, []);
 });
 
-test('breakOthers clears the spare from receivers on other devices too', async () => {
+test('exchangeAll swaps every receiver hearing the spare to the main transmitter, and back on restore', async () => {
   const { store } = tmpStore();
   const engine = fakeEngine();
   const main = store.addChannel({ name: 'A', tx: { device: 'RF', channel: 1 }, rx: { device: 'Console', channel: 1 } });
-  const spare = store.addSpare({ name: 'S', tx: { device: 'RF', channel: 9 }, breakOthers: true });
+  const spare = store.addSpare({ name: 'S', tx: { device: 'RF', channel: 9 }, exchangeAll: true });
   engine.patch('Console', 1, 'RF', 1);
   engine.patch('Listen', 2, 'RF', 9);
   const swap = new SwapController({ engine, store, log: quiet, stepGapMs: 1, verifyAfterMs: 1 });
-  await swap.swap(main.id, spare.id);
-  assert.deepEqual(engine.log, ['unsub Listen/2', 'unsub Console/1', 'sub Console/1 <- RF/9']);
+  const r = await swap.swap(main.id, spare.id);
+  assert.equal(r.ok, true, JSON.stringify(r.steps));
+  assert.deepEqual(engine.log, ['unsub Console/1', 'sub Console/1 <- RF/9', 'sub Listen/2 <- RF/1']);
+  assert.equal(engine.rxState('Listen', 2).subscribedChannel, '01', 'the listen station now hears the main pack');
   engine.log.length = 0;
   await swap.restore(main.id);
-  assert.deepEqual(engine.log, ['sub Console/1 <- RF/1'], 'nothing is re-patched into the listen station');
+  assert.deepEqual(engine.log, ['sub Console/1 <- RF/1', 'sub Listen/2 <- RF/9'], 'the listen station gets the spare back');
 });
 
 test('swap guards: a spare feeding another channel\'s receive path on the same device, and a main with no Tx', async () => {

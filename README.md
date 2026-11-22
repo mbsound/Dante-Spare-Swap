@@ -74,7 +74,7 @@ Every step is a standard Dante receiver subscription change, the same thing Dant
 
 A spare pack is usually patched somewhere already: a spare input on the console, a listen station, a recorder. The app does not know how the audio department wants those used, so it follows one rule: a swap only touches receivers on the **same device** as the channel's receiver, and there it *exchanges* the paths (the spare takes the channel's input, the channel's transmitter takes the spare's old input). Receivers on **other devices** keep hearing the spare.
 
-If you would rather the spare were taken away from everything when it goes into service, tick **also clear it from receivers on other devices** in that spare's settings. It is per spare, so you can mix both behaviours.
+If you would rather every receiver that hears the spare followed the swap, tick **swap all receivers receiving this flow to the MAIN channel's transmitter** in that spare's settings: then a listen station that had the spare hears the faulty pack while the spare is in service, and gets the spare back on restore. It is per spare, so you can mix both behaviours.
 
 ## Wireless receivers (optional)
 
@@ -181,7 +181,7 @@ Everything the UI does is available over HTTP, which makes it straightforward to
 |---|---|
 | `GET /api/show` | Channels, spares, receivers and swap state |
 | `POST /api/channels`, `PATCH /api/channels/:id`, `DELETE /api/channels/:id` | Manage cards (`{ name, image, rx:{device,channel}, notes, rf:{receiverId,channel}, view }`). The transmitter is learned from the receiver's subscription when the card is saved; pass `tx` explicitly to set it yourself |
-| `POST /api/spares`, `PATCH /api/spares/:id`, `DELETE /api/spares/:id` | Manage spares (`{ name, image, tx:{device,channel}, breakOthers, rf, view }`) |
+| `POST /api/spares`, `PATCH /api/spares/:id`, `DELETE /api/spares/:id` | Manage spares (`{ name, image, tx:{device,channel}, exchangeAll, rf, view }`) |
 | `POST /api/reorder` | `{ channels: [ids] }` or `{ spares: [ids] }` |
 | `POST /api/images` | `{ dataUrl }` → `{ file }` (picture stored in the data folder) |
 | `POST /api/swap` | `{ channelId, spareId, force? }` → result with each step. 409 with `code: "spare-in-use"` when the spare carries another channel; repeat with `force: true` to take it anyway |

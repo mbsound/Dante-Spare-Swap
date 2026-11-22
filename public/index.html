@@ -138,9 +138,9 @@
             <label class="field ch"><span>Tx channel</span><select id="fTxChannel"></select></label>
           </div>
           <p class="hint bound" id="txFeeding"></p>
-          <label class="check" id="breakOthersWrap">
-            <input type="checkbox" id="fBreakOthers">
-            <span>When this spare is swapped in, also clear it from receivers on <b>other</b> devices. Off (default): a listen station or anything else on another device keeps hearing the spare; only inputs on the same device as the main's receiver are exchanged.</span>
+          <label class="check" id="exchangeAllWrap">
+            <input type="checkbox" id="fExchangeAll">
+            <span>When this spare is put in use, swap <b>all</b> receivers receiving this flow to the MAIN channel's transmitter. Off (default): only inputs on the same device as the main's receiver are exchanged; a listen station or anything else on another device keeps hearing the spare.</span>
           </label>
         </fieldset>
 

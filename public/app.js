@@ -989,7 +989,7 @@
     txFieldset: $('txFieldset'),
     txLegend: $('txLegend'),
     txFeeding: $('txFeeding'),
-    breakOthers: $('fBreakOthers'),
+    exchangeAll: $('fExchangeAll'),
     rfReceiver: $('fRfReceiver'),
     rfChannel: $('fRfChannel'),
     viewRadios: () => [...document.querySelectorAll('input[name="view"]')],
@@ -1011,7 +1011,7 @@
     // A main is its receive path; a spare is its transmit path.
     f.rxFieldset.hidden = kind !== 'channel';
     f.txFieldset.hidden = kind !== 'spare';
-    f.breakOthers.checked = Boolean(item && item.breakOthers);
+    f.exchangeAll.checked = Boolean(item && item.exchangeAll);
     f.notesWrap.hidden = kind !== 'channel';
     f.del.hidden = !item;
     f.picFile.value = '';
@@ -1388,8 +1388,6 @@
     });
   }
 
-  f.breakOthers.addEventListener('change', () => {});
-
   /** Keep pickers current while the dialog is open without losing the operator's choices. */
   function refreshModalDeviceLists() {
     const tx = readPath('tx');
@@ -1415,7 +1413,7 @@
         body.notes = f.notes.value;
       } else {
         body.tx = readPath('tx');
-        body.breakOthers = f.breakOthers.checked;
+        body.exchangeAll = f.exchangeAll.checked;
       }
       const base = modal.kind === 'channel' ? '/api/channels' : '/api/spares';
       if (modal.id) await api('PATCH', `${base}/${encodeURIComponent(modal.id)}`, body);
